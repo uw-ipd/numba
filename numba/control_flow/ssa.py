@@ -1,10 +1,244 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function, division, absolute_import
+
 import ast
 from itertools import imap, chain
 
 from numba import nodes
-from .debug import logger
+from numba import symtab
+from numba import visitors
+from numba.nodes import cfnodes
+from numba.traits import traits, Delegate
+from numba.control_flow.cfstats import *
+from numba.control_flow.debug import logger, debug
+
+#------------------------------------------------------------------------
+# Single Static Assignment (CFA stage)
+#------------------------------------------------------------------------
+
+@traits
+class SSAer(object):
+    """
+    Put the program in SSA form (single static assignment).
+
+    Computes the dominators for all basic blocks, computes the dominance
+    frontier, renames the variables, creates the phis in the basic blocks,
+    does reaching analysis (which is trivial at this point), and computes
+    the def/use and use/def chains.
+
+        def/use chain:
+            cf_references
+
+        use/def chain:
+            In SSA form, only one definition can reach each use.
+            The definition of a use is set by its 'variable' attribute.
+    """
+
+    blocks = Delegate('flow')
+
+    def __init__(self, flow):
+        self.flow = flow
+
+    def compute_dominators(self):
+        """
+        Compute the dominators for the CFG, i.e. for each basic block the
+        set of basic blocks that dominate that block. This mean from the
+        entry block to that block must go through the blocks in the dominator
+        set.
+
+        dominators(x) = {x} ∪ (∩ dominators(y) for y ∈ preds(x))
+        """
+        blocks = set(self.blocks)
+        for block in self.blocks:
+            block.dominators = blocks
+
+        changed = True
+        while changed:
+            changed = False
+            for block in self.blocks:
+                parent_dominators = [parent.dominators for parent in block.parents]
+                new_doms = set.intersection(block.dominators, *parent_dominators)
+                new_doms.add(block)
+
+                if new_doms != block.dominators:
+                    block.dominators = new_doms
+                    changed = True
+
+    def immediate_dominator(self, x):
+        """
+        The dominator of x that is dominated by all other dominators of x.
+        This is the block that has the largest dominator set.
+        """
+        candidates = x.dominators - set([x])
+        if not candidates:
+            return None
+
+        result = max(candidates, key=lambda b: len(b.dominators))
+        ndoms = len(result.dominators)
+        assert len([b for b in candidates if len(b.dominators) == ndoms]) == 1
+        return result
+
+    def compute_dominance_frontier(self):
+        """
+        Compute the dominance frontier for all blocks. This indicates for
+        each block where dominance stops in the CFG. We use this as the place
+        to insert Φ functions, since at the dominance frontier there are
+        multiple control flow paths to the block, which means multiple
+        variable definitions can reach there.
+        """
+        if debug:
+            print("Dominator sets:")
+            for block in self.blocks:
+                print((block.id, sorted(block.dominators, key=lambda b: b.id)))
+
+        blocks = []
+        for block in self.blocks:
+            if block.parents:
+                block.idom = self.immediate_dominator(block)
+                block.visited = False
+                blocks.append(block)
+
+        self.blocks = blocks
+
+        def visit(block, result):
+            block.visited = True
+            for child in block.children:
+                if not child.visited:
+                    visit(child, result)
+            result.append(block)
+
+        #postorder = []
+        #visit(self.blocks[0], postorder)
+        postorder = self.blocks[::-1]
+
+        # Compute dominance frontier
+        for x in postorder:
+            for y in x.children:
+                if y.idom is not x:
+                    # We are not an immediate dominator of our successor, add
+                    # to frontier
+                    x.dominance_frontier.add(y)
+
+            for z in self.blocks:
+                if z.idom is x:
+                    for y in z.dominance_frontier:
+                        if y.idom is not x:
+                            x.dominance_frontier.add(y)
+
+    def update_for_ssa(self, ast, symbol_table):
+        """
+        1) Compute phi nodes
+
+            for each variable v
+                1) insert empty phi nodes in dominance frontier of each block
+                   that defines v
+                2) this phi defines a new assignment in each block in which
+                   it is inserted, so propagate (recursively)
+
+        2) Reaching definitions
+
+            Set block-local symbol table for each block.
+            This is a rudimentary form of reaching definitions, but we can
+            do it in a single pass because all assignments are known (since
+            we inserted the phi functions, which also count as assignments).
+            This means the output set is known up front for each block
+            and never changes. After setting all output sets, we can compute
+            the input sets in a single pass:
+
+                1) compute output sets for each block
+                2) compute input sets for each block
+
+        3) Update phis with incoming variables. The incoming variables are
+           last assignments of the predecessor blocks in the CFG.
+        """
+        # Print dominance frontier
+        if debug:
+            print("Dominance frontier:")
+            for block in self.blocks:
+                print(('DF(%d) = %s' % (block.id, block.dominance_frontier)))
+
+        argnames = [name.id for name in ast.args.args]
+
+        #
+        ### 1) Insert phi nodes in the right places
+        #
+        for name, variable in symbol_table.iteritems():
+            if not variable.renameable:
+                continue
+
+            defining = []
+            for b in self.blocks:
+                if variable in b.gen:
+                    defining.append(b)
+
+            for defining_block in defining:
+                for f in defining_block.dominance_frontier:
+                    phi = f.phis.get(variable, None)
+                    if phi is None:
+                        phi = PhiNode(f, variable)
+                        f.phis[variable] = phi
+                        defining.append(f)
+
+        #
+        ### 2) Reaching definitions and variable renaming
+        #
+
+        # Set originating block for each variable (as if each variable were
+        # initialized at the start of the function) and start renaming of
+        # variables
+        symbol_table.counters = dict.fromkeys(symbol_table, -1) # var_name -> counter
+        self.blocks[0].symtab = symbol_table
+        for var_name, var in symbol_table.items():
+            if var.renameable:
+                new_var = symbol_table.rename(var, self.blocks[0])
+                new_var.uninitialized = var.name not in argnames
+
+        self.rename_assignments(self.blocks[0])
+
+        for block in self.blocks[1:]:
+            block.symtab = symtab.Symtab(parent=block.idom.symtab)
+            for var, phi_node in block.phis.iteritems():
+                phi_node.variable = block.symtab.rename(var, block)
+                phi_node.variable.name_assignment = phi_node
+                phi_node.variable.is_phi = True
+
+            self.rename_assignments(block)
+
+        #
+        ### 3) Update the phis with all incoming entries
+        #
+        for block in self.blocks:
+            # Insert phis in AST
+            block.phi_nodes = block.phis.values()
+            for variable, phi in block.phis.iteritems():
+                for parent in block.parents:
+                    incoming_var = parent.symtab.lookup_most_recent(variable.name)
+                    phi.incoming.add(incoming_var)
+
+                    phi.variable.uninitialized |= incoming_var.uninitialized
+
+                    # Update def-use chain
+                    incoming_var.cf_references.append(phi)
+
+        #
+        ### 4) Remove any unnecessary phis
+        #
+        kill_unused_phis(self.flow)
+
+    def rename_assignments(self, block):
+        lastvars = dict(block.symtab)
+        for stat in block.stats:
+            if (isinstance(stat, NameAssignment) and
+                    stat.assignment_node and
+                    stat.entry.renameable):
+                # print "setting", stat.lhs, hex(id(stat.lhs))
+                stat.lhs.variable = block.symtab.rename(stat.entry, block)
+                stat.lhs.variable.name_assignment = stat
+            elif isinstance(stat, NameReference) and stat.entry.renameable:
+                current_var = block.symtab.lookup_most_recent(stat.entry.name)
+                stat.node.variable = current_var
+                current_var.cf_references.append(stat.node)
+
 
 #------------------------------------------------------------------------
 # Kill unused Phis

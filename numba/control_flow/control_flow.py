@@ -829,29 +829,8 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
                                                         assignment=node,
                                                         warn_unused=not maybe_unused_node)
             node.targets[i] = lhs
-            # print "mark assignment", self.flow.block, lhs
 
         return node
-
-    def visit_AugAssign(self, node):
-        """
-        Inplace assignment.
-
-        Resolve a += b to a = a + b. Set 'inplace_op' attribute of the
-        Assign node so later stages may recognize inplace assignment.
-
-        Do this now, so that we can correctly mark the RHS reference.
-        """
-        target = node.target
-
-        rhs_target = copy.deepcopy(target)
-        rhs_target.ctx = ast.Load()
-        ast.fix_missing_locations(rhs_target)
-
-        bin_op = ast.BinOp(rhs_target, node.op, node.value)
-        assignment = ast.Assign([target], bin_op)
-        assignment.inplace_op = node.op
-        return self.visit(assignment)
 
     def visit_arg(self, old_node, lineno, col_offset):
         node = nodes.Name(old_node.arg, ast.Param())
@@ -1032,64 +1011,33 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
             name_assignment.assignment_node = node
         return node
 
-    def visit_ListComp(self, node):
-        """
-        Rewrite list comprehensions to the equivalent for loops.
+        with self.flow.float(node, 'exit_for') as node.exit_block:
+            # Body
+            node.for_block = self.flow.nextblock(node.body[0], 'for_body')
+            self.flow.loops.append(LoopDescr(node.exit_block, node.incr_block))
 
-        AST syntax:
+            # Assign to target variable in body
+            node.target, name_assignment = self.mark_assignment(
+                node.target, assignment=None, warn_unused=False)
 
-            ListComp(expr elt, comprehension* generators)
-            comprehension = (expr target, expr iter, expr* ifs)
+            self.visitlist(node.body)
+            self.flow.loops.pop()
 
-            'ifs' represent a chain of ANDs
-        """
-        assert len(node.generators) > 0
+            if self.flow.block:
+                self.flow.block.add_child(node.incr_block)
 
-        # Create innermost body, i.e. list.append(expr)
-        # TODO: size hint for PyList_New
-        list_create = ast.List(elts=[], ctx=ast.Load())
-        list_create.type = object_ # typesystem.ListType()
-        list_create = nodes.CloneableNode(list_create)
-        list_value = nodes.CloneNode(list_create)
-        list_append = ast.Attribute(list_value, "append", ast.Load())
-        append_call = ast.Call(func=list_append, args=[node.elt],
-                               keywords=[], starargs=None, kwargs=None)
+            # Ensure topological dominator order
+            self.flow.blocks.pop(node.incr_block.id)
+            self.flow.blocks.append(node.incr_block)
 
-        # Build up the loops from inwards to outwards
-        body = append_call
-        for comprehension in reversed(node.generators):
-            # Hanlde the 'if' clause
-            ifs = comprehension.ifs
-            if len(ifs) > 1:
-                make_boolop = lambda op1_op2: ast.BoolOp(op=ast.And(),
-                                                         values=op1_op2)
-                if_test = reduce(make_boolop, ifs)
-            elif len(ifs) == 1:
-                if_test, = ifs
-            else:
-                if_test = None
+            self.flow.block = node.incr_block
 
-            if if_test is not None:
-                body = ast.If(test=if_test, body=[body], orelse=[])
+            self.finalize_loop(node, node.cond_block, node.exit_block)
 
-            # Wrap list.append() call or inner loops
-            body = ast.For(target=comprehension.target,
-                           iter=comprehension.iter, body=[body], orelse=[])
+            if name_assignment:
+                name_assignment.assignment_node = node
 
-        expr = nodes.ExpressionNode(stmts=[list_create, body], expr=list_value)
-        return self.visit(expr)
-
-    def visit_GeneratorExp(self, node):
-        raise error.NumbaError(
-                node, "Generator comprehensions are not yet supported")
-
-    def visit_SetComp(self, node):
-        raise error.NumbaError(
-                node, "Set comprehensions are not yet supported")
-
-    def visit_DictComp(self, node):
-        raise error.NumbaError(
-                node, "Dict comprehensions are not yet supported")
+        return node
 
     def visit_With(self, node):
         node.context_expr = self.visit(node.context_expr)
@@ -1101,7 +1049,6 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
         return node
 
     def visit_Raise(self, node):
-        raise error.NumbaError(node, "Raise statement not implemented yet")
 
         self.visitchildren(node)
         if self.flow.exceptions:
@@ -1128,7 +1075,6 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
 
     def visit_Break(self, node):
         if not self.flow.loops:
-            #error(node.pos, "break statement not inside loop")
             return node
 
         loop = self.flow.loops[-1]
@@ -1141,13 +1087,11 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
         else:
             self.flow.block.add_child(loop.next_block)
 
-        #self.flow.nextblock(parent=loop.next_block)
         self.flow.block = None
         return node
 
     def visit_Continue(self, node):
         if not self.flow.loops:
-            #error(node.pos, "continue statement not inside loop")
             return node
 
         loop = self.flow.loops[-1]

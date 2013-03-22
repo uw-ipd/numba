@@ -241,6 +241,83 @@ class SSAer(object):
 
 
 #------------------------------------------------------------------------
+# Merge Phis into AST (CFA stage)
+#------------------------------------------------------------------------
+
+def phi_nodes(basic_block):
+    return basic_block.phis.values()
+
+def merge(basic_block, node):
+    """
+    Merge the phis of the given basic block in the given node.
+    Returns a new node.
+    """
+    return ast.Suite(phi_nodes(basic_block) + [node])
+
+def merge_inplace(basic_block, body_list):
+    """
+    In-place merge of phi nodes from a basic block into a list of AST
+    statements.
+    """
+    nodes = body_list[:]
+    body_list.clear()
+    body_list.extend(phi_nodes(basic_block))
+    body_list.extend(nodes)
+
+
+class PhiInjector(visitors.NumbaTransformer):
+    """
+    Merge PHIs into AST. This happens after the CFG was build and the
+    phis computed.
+    """
+
+    def visit_FunctionDef(self, node):
+        self.visitchildren(node)
+        merge_inplace(node.body_block, node.body)
+        node.body.extend(phi_nodes(self.env.crnt.flow.exit_point))
+        return node
+
+    def handle_if_or_while(self, node, body_block):
+        self.visitchildren(node)
+
+        # condition
+        node.test = nodes.ExpressionNode(phi_nodes(node.cond_block), node.test)
+
+        # body
+        merge_inplace(body_block, node.body)
+
+        # exit block
+        postceding = phi_nodes(node.exit_block)
+
+        return ast.Suite([node] + postceding)
+
+    def visit_If(self, node):
+        return self.handle_if_or_while(node, node.if_block)
+
+    def visit_While(self, node):
+        return self.handle_if_or_while(node, node.while_block)
+
+    def visit_For(self, node):
+        self.visitchildren(node)
+
+        # condition
+        preceding = phi_nodes(node.cond_block)
+
+        # body
+        merge_inplace(node.for_block, node.body)
+
+        # incr
+        incr = phi_nodes(node.incr_block)
+
+        # exit block
+        postceding = phi_nodes(node.exit_block)
+
+        for_node = cfnodes.For(node.target, node.iter, node.body,
+                               incr, node.orelse)
+        return ast.Suite(preceding + [for_node] + postceding)
+
+
+#------------------------------------------------------------------------
 # Kill unused Phis
 #------------------------------------------------------------------------
 

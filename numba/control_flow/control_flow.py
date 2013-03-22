@@ -15,12 +15,14 @@ from functools import reduce
 from numba import error, visitors, symtab, nodes, reporting
 
 from numba import *
-from numba.control_flow import  graphviz, reaching
+from numba.control_flow import graphviz
+from numba.control_flow import reaching
+from numba.control_flow import cfwarnings
 from numba.control_flow.cfstats import *
 from numba.control_flow.debug import *
 
 
-class ControlBlock(nodes.LowLevelBasicBlockNode):
+class ControlBlock(object):
     """
     Control flow graph node. Sequence of assignments and name references.
     This is simultaneously an AST node.
@@ -43,8 +45,6 @@ class ControlBlock(nodes.LowLevelBasicBlockNode):
         gen = {Entry(a): Assignment(a), Entry(b): Assignment(b)}
         bound = set([Entry(a), Entry(c)])
     """
-
-    _fields = ['phi_nodes', 'body']
 
     def __init__(self, id, label='empty', have_code=True, pos=None,
                  is_fabricated=False):
@@ -158,11 +158,6 @@ class ExitBlock(ControlBlock):
 
     def empty(self):
         return False
-
-
-class AssignmentList:
-    def __init__(self):
-        self.stats = []
 
 
 class FloatingBlockContext(object):
@@ -300,117 +295,6 @@ class ControlFlow(object):
             if not reaching.allow_null(node):
                 self.block.bound.add(entry)
             self.entries.add(entry)
-
-    def normalize(self):
-        """Delete unreachable and orphan blocks."""
-        blocks = set(self.blocks)
-        queue = set([self.entry_point])
-        visited = set()
-        while queue:
-            root = queue.pop()
-            visited.add(root)
-            for child in root.children:
-                if child not in visited:
-                    queue.add(child)
-        unreachable = blocks - visited
-        for block in unreachable:
-            block.detach()
-        visited.remove(self.entry_point)
-        for block in visited:
-            if block.empty():
-                for parent in block.parents: # Re-parent
-                    for child in block.children:
-                        parent.add_child(child)
-                block.detach()
-                unreachable.add(block)
-        blocks -= unreachable
-        self.blocks = [block for block in self.blocks if block in blocks]
-
-    def initialize(self):
-        """Set initial state, map assignments to bits."""
-        self.assmts = {}
-
-        offset = 0
-        for entry in self.entries:
-            assmts = AssignmentList()
-            assmts.bit = 1 << offset
-            assmts.mask = assmts.bit
-            self.assmts[entry] = assmts
-            offset += 1
-
-        for block in self.blocks:
-            block.stats = block.phis.values() + block.stats
-            for stat in block.stats:
-                if isinstance(stat, (PhiNode, NameAssignment)):
-                    stat.bit = 1 << offset
-                    assmts = self.assmts[stat.entry]
-                    assmts.stats.append(stat)
-                    assmts.mask |= stat.bit
-                    offset += 1
-
-        for block in self.blocks:
-            for entry, stat in block.gen.items():
-                assmts = self.assmts[entry]
-                if stat is Uninitialized:
-                    block.i_gen |= assmts.bit
-                else:
-                    block.i_gen |= stat.bit
-                block.i_kill |= assmts.mask
-            block.i_output = block.i_gen
-            for entry in block.bound:
-                block.i_kill |= self.assmts[entry].bit
-
-        for assmts in self.assmts.itervalues():
-            self.entry_point.i_gen |= assmts.bit
-        self.entry_point.i_output = self.entry_point.i_gen
-
-    def map_one(self, istate, entry):
-        "Map the bitstate of a variable to the definitions it represents"
-        ret = set()
-        assmts = self.assmts[entry]
-        if istate & assmts.bit:
-            ret.add(Uninitialized)
-        for assmt in assmts.stats:
-            if istate & assmt.bit:
-                ret.add(assmt)
-        return ret
-
-    def reaching_definitions(self):
-        """Per-block reaching definitions analysis."""
-        dirty = True
-        while dirty:
-            dirty = False
-            for block in self.blocks:
-                i_input = 0
-                for parent in block.parents:
-                    i_input |= parent.i_output
-                i_output = (i_input & ~block.i_kill) | block.i_gen
-                if i_output != block.i_output:
-                    dirty = True
-                block.i_input = i_input
-                block.i_output = i_output
-
-    def initialize_sets(self):
-        """
-        Set initial state, run after SSA. There is only ever one live
-        definition of a variable in a block, so we can simply track input
-        and output definitions as the Variable/Entry they came as.
-        """
-        for block in self.blocks:
-            # Insert phi nodes from SSA stage into the assignments of the block
-            for phi in block.phis:
-                block.gen.setdefault(phi, []).insert(0, phi)
-
-            # Update the kill set with the variables that are assigned to in
-            # the block
-            block.kill = set(block.gen)
-            block.output = set(block.gen)
-            #for entry in block.bound:
-            #    block.i_kill |= self.assmts[entry].bit
-
-        for assmts in self.assmts.itervalues():
-            self.entry_point.i_gen |= assmts.bit
-        self.entry_point.i_output = self.entry_point.i_gen
 
     def compute_dominators(self):
         """
@@ -647,7 +531,7 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
         # TODO: Use the message collection from the environment
         # messages = reporting.MessageCollection()
         messages = env.crnt.error_env.collection
-        self.warner = reaching.CFWarner(messages, self.current_directives)
+        self.warner = cfwarnings.CFWarner(messages, self.current_directives)
 
         if env:
             if hasattr(env, 'translation'):

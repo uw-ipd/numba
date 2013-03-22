@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function, division, absolute_import
 
+from numba.traits import traits, Delegate
 from numba.control_flow.cfstats import (
     NameReference, NameAssignment, Uninitialized, PhiNode)
 
@@ -89,7 +90,12 @@ class AssignmentList(object):
         self.stats = []
 
 
+@traits
 class ReachingDefs(object):
+
+    entry_point = Delegate('flow')
+    blocks = Delegate('flow')
+    entries = Delegate('flow')
 
     def __init__(self, flow):
         self.flow = flow
@@ -98,7 +104,7 @@ class ReachingDefs(object):
     def normalize(self):
         """Delete unreachable and orphan blocks."""
         blocks = set(self.blocks)
-        queue = set([self.flow.entry_point])
+        queue = set([self.entry_point])
         visited = set()
         while queue:
             root = queue.pop()
@@ -109,7 +115,7 @@ class ReachingDefs(object):
         unreachable = blocks - visited
         for block in unreachable:
             block.detach()
-        visited.remove(self.flow.entry_point)
+        visited.remove(self.entry_point)
         for block in visited:
             if block.empty():
                 for parent in block.parents: # Re-parent
@@ -125,7 +131,7 @@ class ReachingDefs(object):
         self.assmts = {}
 
         offset = 0
-        for entry in self.flow.entries:
+        for entry in self.entries:
             assmts = AssignmentList()
             assmts.bit = 1 << offset
             assmts.mask = assmts.bit
@@ -155,8 +161,8 @@ class ReachingDefs(object):
                 block.i_kill |= self.assmts[entry].bit
 
         for assmts in self.assmts.itervalues():
-            self.flow.entry_point.i_gen |= assmts.bit
-        self.flow.entry_point.i_output = self.flow.entry_point.i_gen
+            self.entry_point.i_gen |= assmts.bit
+        self.entry_point.i_output = self.entry_point.i_gen
 
     def map_one(self, istate, entry):
         "Map the bitstate of a variable to the definitions it represents"

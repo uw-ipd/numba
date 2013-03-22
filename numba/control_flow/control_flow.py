@@ -56,9 +56,8 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
         # Stack of control flow blocks
         self.stack = []
 
-        flow = ControlFlow(self.env, self.source_descr)
-        self.env.translation.crnt.flow = flow
-        self.flow = flow
+        self.flow = flow.ControlFlow(self.env, self.source_descr)
+        self.env.translation.crnt.flow = self.flow
 
         # TODO: Use the message collection from the environment
         # messages = reporting.MessageCollection()
@@ -383,6 +382,8 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
         if node.optional_vars:
             # TODO: Mark these as assignments!
             node.optional_vars = self.visit(node.optional_vars)
+
+        # TODO: Build CFG for with blocks
 
         self.visitlist(node.body)
         return node

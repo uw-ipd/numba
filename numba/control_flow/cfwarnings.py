@@ -8,6 +8,7 @@ from __future__ import print_function, division, absolute_import
 
 from numba import error
 from numba import traits
+from numba.control_flow import reaching
 from numba.control_flow.cfstats import Uninitialized
 
 @traits.traits
@@ -30,7 +31,7 @@ class CFWarner(object):
                 from_closure = False # entry.from_closure
                 if not from_closure and len(node.cf_state) == 1:
                     node.cf_is_null = True
-                if allow_null(node) or from_closure: # or entry.is_pyclass_attr:
+                if reaching.allow_null(node) or from_closure:
                     pass # Can be uninitialized here
                 elif node.cf_is_null:
                     is_object = True #entry.type.is_pyobject

@@ -629,11 +629,7 @@ class TypeInferer(visitors.NumbaTransformer):
         return node
 
     def visit_booltest(self, node):
-        if isinstance(node.test, control_flow.ControlBlock):
-            node.test.body[0] = nodes.CoercionNode(
-                node.test.body[0], minitypes.bool_)
-        else:
-            node.test = nodes.CoercionNode(node.test, minitypes.bool_)
+        node.test = nodes.CoercionNode(node.test, minitypes.bool_)
 
     def visit_While(self, node):
         self.generic_visit(node)

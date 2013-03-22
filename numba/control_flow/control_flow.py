@@ -168,6 +168,29 @@ class AssignmentList:
         self.stats = []
 
 
+class FloatingBlockContext(object):
+    """
+    Create a floating block, which can be used to connect other blocks to,
+    before commiting it to the CFG. Using this will ensure a topological
+    ordering of the CFG blocks.
+    """
+
+    def __init__(self, flow, block):
+        self.flow = flow
+        self.block = block
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.flow.add_floating(self.block)
+
+        if self.block.parents:
+            self.flow.block = self.block
+        else:
+            self.flow.block = None
+
+
 class ControlFlow(object):
     """
     Control-flow graph.

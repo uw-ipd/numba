@@ -54,8 +54,22 @@ class While(ast.While, FlowNode):
     # 'the counter increment block'
     continue_block = None
 
-class For(ast.For, FlowNode):
-    "A for loop node. Has the basic block attributes from FlowNode"
+class For(ast.For):
+
+    _fields = (
+        'target',
+        'iter',
+        'body',
+        'incr',
+        'orelse',
+    )
+
+    def __init__(self, target, iter, body, incr, orelse):
+        self.target = target
+        self.iter = iter
+        self.body = body
+        self.incr = incr
+        self.orelse = orelse
 
 def merge_cfg_in_ast(basic_block_fields, bodies, node):
     """

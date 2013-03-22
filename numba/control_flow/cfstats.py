@@ -76,6 +76,12 @@ class Argument(NameAssignment):
         NameAssignment.__init__(self, lhs, rhs, entry)
         self.is_arg = True
 
+class PhiCollection(nodes.Node):
+    """
+    Collection of PHI nodes in the AST.
+    """
+
+    _fields = ['body']
 
 class PhiNode(nodes.Node):
 

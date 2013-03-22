@@ -176,7 +176,7 @@ class FloatingBlockContext(object):
         self.block = block
 
     def __enter__(self):
-        return self
+        return self.block
 
     def __exit__(self, *args):
         self.flow.add_floating(self.block)

@@ -453,31 +453,12 @@ class LateSpecializer(ResolveCoercions, LateBuiltinResolverMixin,
 
     def visit_FunctionDef(self, node):
         node.decorator_list = self.visitlist(node.decorator_list)
-
-        # Make sure to visit the entry block (not part of the CFG) and the
-        # first actual code block which may have synthetically
-        # inserted promotions
-        self.visit_ControlBlock(node.flow.blocks[0])
-        self.visit_ControlBlock(node.flow.blocks[1])
-
         node.body = self.visitlist(node.body)
 
         ret_type = self.func_signature.return_type
-        self.verify_context(ret_type)
-
         self.setup_error_return(node, ret_type)
-        return node
 
-    def verify_context(self, ret_type):
-        if ret_type.is_object or ret_type.is_array:
-            # This will require some increfs, but allow it if people
-            # use 'with python' later on. If 'with python' isn't used, a
-            # return will issue the error
-            #if self.nopython:
-            #    raise error.NumbaError(
-            #            node, "Function cannot return object in "
-            #                  "nopython context")
-            pass
+        return node
 
     def setup_error_return(self, node, ret_type):
         """

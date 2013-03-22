@@ -34,27 +34,13 @@ def unpack_range_args(node):
 
     return [start, stop, step]
 
-def make_while_loop(flow_node):
-    "Create a while loop from a flow node (a While or If node)"
-    while_node = nodes.While(test=flow_node.test,
-                             body=flow_node.body,
-                             orelse=flow_node.orelse)
-    return while_node
-
-def copy_basic_blocks(flow_node_src, flow_node_dst):
-    "Copy cfg basic blocks from one flow node to another"
-    flow_node_dst.cond_block = flow_node_src.cond_block
-    flow_node_dst.if_block   = flow_node_src.if_block
-    flow_node_dst.else_block = flow_node_src.else_block
-    flow_node_dst.exit_block = flow_node_src.exit_block
 
 def make_while_from_for(for_node):
     "Create a While from a For. The 'test' (loop condition) must still be set."
     while_node = nodes.While(test=None,
                              body=for_node.body,
+                             incr=for_node.incr,
                              orelse=for_node.orelse)
-    copy_basic_blocks(for_node, while_node)
-    while_node = nodes.build_while(**vars(while_node))
     return while_node
 
 
@@ -96,7 +82,7 @@ class TransformForIterable(visitors.NumbaTransformer):
             have_step = True
 
         start, stop, step = [nodes.CloneableNode(n)
-                             for n in (start, stop, step)]
+                                 for n in (start, stop, step)]
 
         if have_step:
             compute_nsteps = """
@@ -138,8 +124,8 @@ class TransformForIterable(visitors.NumbaTransformer):
             start=start, stop=stop, step=step,
             nsteps=nsteps.store(), nsteps_load=nsteps.load(),
             temp=temp.store(), temp_load=temp.load(),
-            target=node.target,
-            body=body, else_body=else_body)
+            target=node.target, body=body,
+            else_body=else_body)
 
         #--------------------------------------------------------------------
         # Patch the body and else clause
@@ -148,28 +134,17 @@ class TransformForIterable(visitors.NumbaTransformer):
         body.body.extend(node.body)
         else_body.body.extend(node.orelse)
 
+        #--------------------------------------------------------------------
+        # Create nodes.While with increment body (for 'continue')
+        #--------------------------------------------------------------------
+
         while_node = result.body[-1]
         assert isinstance(while_node, ast.While)
+        incr_stat = while_node.body.pop()
+        assert isinstance(incr_stat, ast.Assign)
+        while_node = nodes.While(while_node.test, while_node.body,
+                                 [incr_stat], while_node.orelse)
 
-        target_increment = while_node.body[-1]
-        assert isinstance(target_increment, ast.Assign)
-
-        # Add target variable increment basic block
-        node.incr_block.body = [target_increment]
-        while_node.body[-1] = node.incr_block
-
-        #--------------------------------------------------------------------
-        # Create a While with the ForNode's cfg blocks merged in
-        #--------------------------------------------------------------------
-
-        while_node = make_while_loop(while_node)
-        copy_basic_blocks(node, while_node)
-        while_node = nodes.build_while(**vars(while_node))
-
-        # Create the place to jump to for 'continue'
-        while_node.continue_block = node.incr_block
-
-        # Set the new while loop in the templated Suite
         result.body[-1] = while_node
 
         return result
@@ -183,7 +158,7 @@ class TransformForIterable(visitors.NumbaTransformer):
 
         becomes
 
-            for i in my_array.shape[0]:
+            for i in range(my_array.shape[0]):
                 value = my_array[i]
                 ...
         """

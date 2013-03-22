@@ -158,7 +158,7 @@ class ExitBlock(ControlBlock):
 
 
 #----------------------------------------------------------------------------
-# Utilities
+# Content Manager for Basic Blocks
 #----------------------------------------------------------------------------
 
 class FloatingBlockContext(object):

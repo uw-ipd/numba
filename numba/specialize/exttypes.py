@@ -60,7 +60,7 @@ class ExtensionTypeLowerer(visitors.NumbaTransformer):
 
 
 #------------------------------------------------------------------------
-# Handle Static VTable Attributes and Methods
+# Handle Static OrderedVTable Attributes and Methods
 #------------------------------------------------------------------------
 
 class StaticExtensionHandler(object):
@@ -131,7 +131,7 @@ class StaticExtensionHandler(object):
 
 
 #------------------------------------------------------------------------
-# Handle Dynamic VTable Attributes and Methods
+# Handle Dynamic OrderedVTable Attributes and Methods
 #------------------------------------------------------------------------
 
 def call_jit(jit_func, args):

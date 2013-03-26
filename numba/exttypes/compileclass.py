@@ -253,7 +253,7 @@ class AttributesInheriter(object):
         bases = utils.get_numba_bases(ext_type.py_class)
 
         parent_vtables = [base.exttype.vtab_type for base in bases]
-        vtable = methodtable.VTabType(ext_type.py_class, parent_vtables)
+        vtable = methodtable.VTable(ext_type.py_class, parent_vtables)
 
         for base in bases:
             self.inherit_methods(vtable, base.exttype)

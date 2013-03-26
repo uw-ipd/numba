@@ -99,14 +99,14 @@ class AttributeTableOrderValidator(ExtTypeValidator):
 
     def validate(self, ext_type):
         ordering.validate_extending_order_compatibility(
-            ordering.AttributeTable(ext_type.attribute_table))
+            ordering.OrderedAttributeTable(ext_type.attribute_table))
 
 class MethodTableOrderValidator(ExtTypeValidator):
     "Validate method table with static order (non-hash-based)."
 
     def validate(self, ext_type):
         ordering.validate_extending_order_compatibility(
-            ordering.VTable(ext_type.vtab_type))
+            ordering.OrderedVTable(ext_type.vtab_type))
 
 # ______________________________________________________________________
 # Validate Table Slot Types
@@ -135,7 +135,7 @@ class AttributeTypeValidator(ExtTypeValidator):
 
     def validate(self, ext_type):
         comparer = lambda t1, t2: t1 == t2
-        abstract_table = ordering.AttributeTable(ext_type.attribute_table)
+        abstract_table = ordering.OrderedAttributeTable(ext_type.attribute_table)
         validate_type_table(abstract_table, comparer)
 
 
@@ -151,7 +151,7 @@ class MethodTypeValidator(ExtTypeValidator):
             t2 = method2.signature
             return methods.equal_signatures(t1, t2)
 
-        abstract_table = ordering.VTable(ext_type.vtab_type)
+        abstract_table = ordering.OrderedVTable(ext_type.vtab_type)
         validate_type_table(abstract_table, comparer)
 
 

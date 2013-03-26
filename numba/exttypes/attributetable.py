@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Extension attribute table type. Supports ordered (struct) fields, or
+Extension attribute table. Supports ordered (struct) fields, or
 unordered (hash-based) fields.
 """
 
@@ -17,7 +17,7 @@ from numba.exttypes import ordering
 
 class AttributeTable(NumbaType):
     """
-    Type for extension type attributes.
+    Table for extension type attributes.
     """
 
     def __init__(self, py_class, parents):
@@ -45,7 +45,7 @@ class AttributeTable(NumbaType):
 
             ordering ∈ { unordered, extending, ... }
         """
-        self.attributes = orderer(ordering.AttributeTable(self))
+        self.attributes = orderer(ordering.OrderedAttributeTable(self))
 
     def need_tp_dealloc(self):
         """
@@ -69,7 +69,7 @@ class AttributeTable(NumbaType):
                                       for name in self.attributes)
 
     def __repr__(self):
-        return "AttributeTable(%s)" % self.strtable()
+        return "OrderedAttributeTable(%s)" % self.strtable()
 
     @classmethod
     def empty(cls, py_class):

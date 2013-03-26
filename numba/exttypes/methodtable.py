@@ -14,9 +14,9 @@ from numba.exttypes.types import methods
 # Virtual Method Table Type
 #------------------------------------------------------------------------
 
-class VTabType(object):
+class VTable(object):
     """
-    Virtual method table type.
+    Virtual method table.
     """
 
     def __init__(self, py_class, parents):
@@ -48,7 +48,7 @@ class VTabType(object):
 
             ordering ∈ { unordered, extending, ... }
         """
-        self.methodnames = orderer(ordering.VTable(self))
+        self.methodnames = orderer(ordering.OrderedVTable(self))
 
     def add_method(self, method):
         """

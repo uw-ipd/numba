@@ -39,13 +39,13 @@ class AbstractTable(object):
         return list(map(cls, self.table.parents))
 
 @traits
-class VTable(AbstractTable):
+class OrderedVTable(AbstractTable):
 
     attributes = Delegate('table', 'methodnames')
     attrdict = Delegate('table', 'methoddict')
 
 @traits
-class AttributeTable(AbstractTable):
+class OrderedAttributeTable(AbstractTable):
 
     attributes = Delegate('table', 'attributes')
     attrdict = Delegate('table', 'attributedict')

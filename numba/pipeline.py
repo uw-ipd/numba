@@ -330,8 +330,6 @@ class ControlFlowAnalysis(PipelineStage):
                                           ast, env)
         ast = transform.visit(ast)
         env.translation.crnt.symtab = transform.symtab
-        ast.flow = transform.flow
-        env.translation.crnt.ast.cfg_transform = transform
         return ast
 
 

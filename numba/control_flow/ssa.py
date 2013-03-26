@@ -17,7 +17,7 @@ from numba.control_flow.debug import logger, debug
 #------------------------------------------------------------------------
 
 @traits
-class SSAer(object):
+class SSAifier(object):
     """
     Put the program in SSA form (single static assignment).
 
@@ -321,11 +321,6 @@ class PhiInjector(visitors.NumbaTransformer):
 # Kill unused Phis
 #------------------------------------------------------------------------
 
-def kill_unused_phis(cfg):
-    changed = True
-    while changed:
-        changed = _kill_unused_phis(cfg)
-
 def kill_phi(block, phi):
     logger.debug("Killing phi: %s", phi)
 
@@ -387,6 +382,8 @@ def iter_phi_vars(flow):
 #------------------------------------------------------------------------
 # Specialization code for SSA
 #------------------------------------------------------------------------
+
+# TODO: Do this before spitting out typed IR
 
 def specialize_ssa(funcdef):
     """
@@ -454,6 +451,8 @@ def specialize_phi(node):
 #------------------------------------------------------------------------
 # Handle phis during code generation
 #------------------------------------------------------------------------
+
+# TODO: should will be explicit in the IR, remove
 
 def process_incoming(phi_node):
     """

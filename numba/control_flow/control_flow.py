@@ -42,31 +42,14 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
     def __init__(self, context, func, ast, allow_rebind_args, env, **kwargs):
         super(ControlFlowAnalysis, self).__init__(context, func, ast, env=env,
                                                   **kwargs)
-        self.visitchildren = self.generic_visit
+
         self.current_directives = kwargs.get('directives', None) or {}
         self.current_directives['warn'] = kwargs.get('warn', True)
         self.set_default_directives()
         self.symtab = self.initialize_symtab(allow_rebind_args)
 
-        self.graphviz = self.current_directives['control_flow.dot_output']
-        if self.graphviz:
-            self.gv_ctx = graphviz.GVContext()
-            self.source_descr = reporting.SourceDescr(func, ast)
-
-        # Stack of control flow blocks
-        self.stack = []
-
         self.flow = flow.ControlFlow(self.env, self.source_descr)
-        self.env.translation.crnt.flow = self.flow
 
-        # TODO: Use the message collection from the environment
-        # messages = reporting.MessageCollection()
-        messages = env.crnt.error_env.collection
-        self.warner = cfwarnings.CFWarner(messages, self.current_directives)
-
-        if env:
-            if hasattr(env, 'translation'):
-                env.translation.crnt.cfg_transform = self
 
     def set_default_directives(self):
         "Set some defaults for warnings"
@@ -126,7 +109,6 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
         self.function_level += 1
 
         self.visitlist(node.decorator_list)
-        self.stack.append(self.flow)
 
         # Collect all entries
         for var_name, var in self.symtab.iteritems():
@@ -152,17 +134,6 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
             self.flow.block.add_child(self.flow.exit_point)
 
         self.flow.add_floating(self.flow.exit_point)
-
-        # Cleanup graph
-        # self.flow.normalize()
-        reaching.check_definitions(self.env, self.flow, self.warner)
-
-        # self.render_gv(node)
-
-        ssa_maker = ssa.SSAer(self.flow)
-        ssa_maker.compute_dominators()
-        ssa_maker.compute_dominance_frontier()
-        ssa_maker.update_for_ssa(self.ast, self.symtab)
 
         return node
 

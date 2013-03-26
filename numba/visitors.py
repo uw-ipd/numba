@@ -6,7 +6,10 @@ try:
     import __builtin__ as builtins
 except ImportError:
     import builtins
+
 import types
+
+from numba.traits import traits, Delegate
 from numba import functions, PY3
 from numba import nodes
 from numba.nodes.metadata import annotate, query
@@ -23,13 +26,9 @@ from numba import error, PY3
 import logging
 logger = logging.getLogger(__name__)
 
-class CooperativeBase(object):
-    def __init__(self, *args, **kwargs):
-        pass
 
-class NumbaVisitorMixin(CooperativeBase):
+class NumbaVisitor(object):
 
-    _overloads = None
     func_level = 0
 
     def __init__(self, context, func, ast, locals=None,
@@ -38,7 +37,7 @@ class NumbaVisitorMixin(CooperativeBase):
 
         assert locals is not None
 
-        super(NumbaVisitorMixin, self).__init__(
+        super(NumbaVisitor, self).__init__(
             context, func, ast, func_signature=func_signature,
             nopython=nopython, symtab=symtab, **kwargs)
 
@@ -198,31 +197,6 @@ class NumbaVisitorMixin(CooperativeBase):
             # Invalidate validity of code object
             annotate(self.env, ast, __numba_valid_code_object=False)
 
-    def _visit_overload(self, node):
-        assert self._overloads
-
-        try:
-            return super(NumbaVisitorMixin, self).visit(node)
-        except error.NumbaError as e:
-            # Try one of the overloads
-            cls_name = type(node).__name__
-            for i, cls_name in enumerate(self._overloads):
-                for overload_name, func in self._overloads[cls_name]:
-                    try:
-                        return func(self, node)
-                    except error.NumbaError as e:
-                        if i == len(self._overloads) - 1:
-                            raise
-
-        assert False, "unreachable"
-
-    def add_overload(self, visit_name, func):
-        assert visit_name.startswith("visit_")
-        if not self._overloads:
-            self._overloads = {}
-
-        self._overloads.setdefault(visit_name, []).append(func)
-
     def is_closure_signature(self, func_signature):
         from numba import closures
         return closures.is_closure_signature(func_signature)
@@ -281,49 +255,6 @@ class NumbaVisitorMixin(CooperativeBase):
         list[:] = newlist
         return list
 
-    def is_complex(self, n):
-        if numbers:
-            return isinstance(n, numbers.Complex)
-        return isinstance(n, complex)
-
-    def is_real(self, n):
-        if numbers:
-            return isinstance(n, numbers.Real)
-        return isinstance(n, float)
-
-    def is_int(self, n):
-        if numbers:
-            return isinstance(n, numbers.Int)
-        return isinstance(n, (int, long))
-
-    def visit_CloneNode(self, node):
-        return node
-
-    def visit_ControlBlock(self, node):
-        #self.local_scopes.append(node.symtab)
-        self.setblock(node)
-        self.visitlist(node.phi_nodes)
-        self.visitlist(node.body)
-        #self.local_scopes.pop()
-        return node
-
-    def setblock(self, cfg_basic_block):
-        if cfg_basic_block.is_fabricated:
-            return
-
-        old = self.flow_block
-        self.flow_block = cfg_basic_block
-
-        if old is not cfg_basic_block:
-            self.current_scope = cfg_basic_block.symtab
-
-        self.changed_block(old, cfg_basic_block)
-
-    def changed_block(self, old_block, new_block):
-        """
-        Callback for when a new cfg block is encountered.
-        """
-
     def handle_phis(self, reversed=False):
         blocks = self.ast.flow.blocks
         if reversed:
@@ -333,13 +264,13 @@ class NumbaVisitorMixin(CooperativeBase):
                 self.handle_phi(phi_node)
 
 
-class NumbaVisitor(ast.NodeVisitor, NumbaVisitorMixin):
+class NumbaVisitor(ast.NodeVisitor, NumbaVisitor):
     "Non-mutating visitor"
 
     def visitlist(self, list):
         return [self.visit(item) for item in list]
 
-class NumbaTransformer(NumbaVisitorMixin, ast.NodeTransformer):
+class NumbaTransformer(NumbaVisitor, ast.NodeTransformer):
     "Mutating visitor"
 
 class NoPythonContextMixin(object):

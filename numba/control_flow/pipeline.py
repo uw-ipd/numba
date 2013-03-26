@@ -29,8 +29,6 @@ def control_flow_pipeline(env, ast):
     # Cleanup graph
     # self.flow.normalize()
 
-    self.env.translation.crnt.flow = self.flow
-
     messages = env.crnt.error_env.collection
     self.warner = cfwarnings.CFWarner(messages, self.current_directives)
 

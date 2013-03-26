@@ -111,7 +111,7 @@ class CloneNode(ExprNode):
     The CloneableNode must be evaluated before the CloneNode is evaluated!
     """
 
-    _fields = ['node']
+    _fields = []
 
     def __init__(self, node, **kwargs):
         super(CloneNode, self).__init__(**kwargs)

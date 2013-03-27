@@ -21,7 +21,7 @@ from numba import error
 import logging
 logger = logging.getLogger(__name__)
 
-
+@traits
 class NumbaStatefulVisitor(object):
 
     func_level = 0
@@ -44,16 +44,7 @@ class NumbaStatefulVisitor(object):
     # AST node visitor
     node_visitor = None
 
-    def __init__(self, context, func, ast, locals=None,
-                 func_signature=None, nopython=0,
-                 symtab=None, env=None, **kwargs):
-
-        assert locals is not None
-
-        super(NumbaVisitor, self).__init__(
-            context, func, ast, func_signature=func_signature,
-            nopython=nopython, symtab=symtab, env=None, **kwargs)
-
+    def __init__(self, context, func, ast, env, **kwargs):
         self.env = kwargs.get('env', None)
         self.context = context
         self.ast = ast
@@ -104,7 +95,7 @@ class NumbaStatefulVisitor(object):
                 local_name for local_name in self.locals
                                if local_name not in self.local_names)
 
-        if self.is_closure_signature(func_signature) and func is not None:
+        if self.is_closure_signature(self.func_signature) and func is not None:
             # If a closure is backed up by an actual Python function, the
             # closure scope argument is absent
             from numba import closures

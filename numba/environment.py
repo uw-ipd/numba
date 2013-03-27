@@ -40,7 +40,6 @@ default_pipeline_order = [
     'update_signature',
     'create_lfunc2',
     'TypeSet',
-    'dump_cfg',
     'ClosureTypeInference',
     'create_lfunc3',
     'TransformFor',
@@ -270,17 +269,26 @@ class FunctionEnvironment(object):
         object,
         'Metadata for AST nodes of the function being compiled.')
 
+    warn = True
+
+    cfdirectives = TypedProperty(
+        dict, "Directives for control flow.",
+        default={
+            'warn.maybe_uninitialized': warn,
+            'warn.unused_result': False,
+            'warn.unused': warn,
+            'warn.unused_arg': warn,
+            # Set the below flag to a path to generate CFG dot files
+            'control_flow.dot_output': '', # os.path.expanduser("~/cfg.dot"),
+            'control_flow.dot_annotate_defs': False,
+        },
+    )
+
+    # TODO: Remove
     flow = TypedProperty(
         (types.NoneType, ControlFlow),
         "Control flow graph. See numba.control_flow.",
         default=None)
-
-    # FIXME: Get rid of this.  See comment for translator property,
-    # below.
-    cfg_transform = TypedProperty(
-        object, # Should be ControlFlowAnalysis.
-        'The Control Flow Analysis transform object '
-        '(control_flow.ControlFlowAnalysis). Set during the cfg pass.')
 
     # FIXME: Get rid of this property; pipeline stages are users and
     # transformers of the environment.  Any state needed beyond a
@@ -344,8 +352,8 @@ class FunctionEnvironment(object):
              llvm_module=None, wrap=True, link=True,
              symtab=None,
              error_env=None, function_globals=None, locals=None,
-             template_signature=None, cfg_transform=None,
-             is_closure=False, closures=None, closure_scope=None,
+             template_signature=None, is_closure=False,
+             closures=None, closure_scope=None,
              refcount_args=True,
              ast_metadata=None, warn=True, warnstyle='fancy',
              **kws):
@@ -398,7 +406,6 @@ class FunctionEnvironment(object):
 
         self.locals = locals if locals is not None else {}
         self.template_signature = template_signature
-        self.cfg_transform = cfg_transform
         self.is_closure = is_closure
         self.closures = closures if closures is not None else {}
         self.closure_scope = closure_scope

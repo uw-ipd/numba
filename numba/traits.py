@@ -26,6 +26,7 @@ class TraitBase(object):
     def __init__(self, value, doc=None):
         self.value = value
         self.doc = doc
+        self.attr_name = None
 
     def set_attr_name(self, name):
         self.attr_name = name

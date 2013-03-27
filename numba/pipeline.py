@@ -22,9 +22,10 @@ from numba import optimize
 from numba import closures
 from numba import reporting
 from numba import normalize
+from numba.control_flow import ssa
+from numba.control_flow import entrypoints as cfentrypoints
 from numba.codegen import llvmwrapper
 from numba import ast_constant_folding as constant_folding
-from numba.control_flow import ssa
 from numba.codegen import translate
 from numba import utils
 from numba.missing import FixMissingLocations
@@ -326,18 +327,9 @@ class ControlFlowAnalysis(PipelineStage):
         return True
 
     def transform(self, ast, env):
-        transform = self.make_specializer(control_flow.ControlFlowAnalysis,
-                                          ast, env)
-        ast = transform.visit(ast)
-        env.translation.crnt.symtab = transform.symtab
+        symtab = cfentrypoints.build_ssa(env, ast)
+        env.translation.crnt.symtab = symtab
         return ast
-
-
-def dump_cfg(ast, env):
-    if env.translation.crnt.cfg_transform.graphviz:
-        env.translation.crnt.cfg_transform.render_gv(ast)
-    return ast
-
 
 class ConstFolding(PipelineStage):
     def check_preconditions(self, ast, env):

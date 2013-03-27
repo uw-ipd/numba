@@ -7,59 +7,35 @@ Adapted from Cython/Compiler/FlowControl.py
 """
 from __future__ import print_function, division, absolute_import
 
-import re
 import ast
-import copy
-from functools import reduce
 
-from numba import error, visitors, symtab, nodes, reporting
-
-from numba import *
-from numba.control_flow import ssa
-from numba.control_flow import flow
-from numba.control_flow import graphviz
-from numba.control_flow import reaching
-from numba.control_flow import cfwarnings
+from numba import visitors
+from numba import symtab
+from numba import nodes
 from numba.control_flow.cfstats import *
-from numba.control_flow.debug import *
-
 
 class ControlFlowAnalysis(visitors.NumbaTransformer):
     """
     Control flow analysis pass that builds the CFG and injects the blocks
     into the AST (but not all blocks are injected).
 
-    The CFG must be build in topological DFS order, e.g. the 'if' condition
-    block must precede the clauses and the clauses must precede the exit.
+    The CFG must be build in topological dominator tree order, e.g. the
+    'if' condition block must precede the clauses and the clauses must
+    precede the exit.
     """
-
-    graphviz = False
-    gv_ctx = None
-    source_descr = None
 
     function_level = 0
 
-    def __init__(self, context, func, ast, allow_rebind_args, env, **kwargs):
-        super(ControlFlowAnalysis, self).__init__(context, func, ast, env=env,
-                                                  **kwargs)
+    def __init__(self, env, func, ast, cfflow):
+        super(ControlFlowAnalysis, self).__init__(env.context, func, ast,
+                                                  env)
+        self.flow = cfflow
 
-        self.current_directives = kwargs.get('directives', None) or {}
-        self.current_directives['warn'] = kwargs.get('warn', True)
-        self.set_default_directives()
-        self.symtab = self.initialize_symtab(allow_rebind_args)
+        self.initialize_symtab(allow_rebind_args=True)
 
-        self.flow = flow.ControlFlow(self.env, self.source_descr)
+    # ______________________________________________________________________
 
-
-    def set_default_directives(self):
-        "Set some defaults for warnings"
-        warn = self.current_directives['warn']
-        self.current_directives.setdefault('warn.maybe_uninitialized', warn)
-        self.current_directives.setdefault('warn.unused_result', False)
-        self.current_directives.setdefault('warn.unused', warn)
-        self.current_directives.setdefault('warn.unused_arg', warn)
-        self.current_directives.setdefault('control_flow.dot_output', dot_output_graph)
-        self.current_directives.setdefault('control_flow.dot_annotate_defs', False)
+    # TODO: Make this a separate pass
 
     def initialize_symtab(self, allow_rebind_args):
         """
@@ -85,6 +61,8 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
             symbols[var_name] = variable
 
         return symbols
+
+    # ______________________________________________________________________
 
     def visit(self, node):
         if hasattr(node, 'lineno'):
@@ -136,9 +114,6 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
         self.flow.add_floating(self.flow.exit_point)
 
         return node
-
-    def render_gv(self, node):
-        graphviz.render_gv(node, self.gv_ctx, self.flow, self.current_directives)
 
     def mark_assignment(self, lhs, rhs=None, assignment=None, warn_unused=True):
         assert self.flow.block

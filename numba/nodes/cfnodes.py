@@ -30,15 +30,13 @@ class For(ast.For):
         'target',
         'iter',
         'body',
-        'incr',
         'orelse',
     )
 
-    def __init__(self, target, iter, body, incr, orelse):
+    def __init__(self, target, iter, body, orelse):
         self.target = target
         self.iter = iter
         self.body = body
-        self.incr = incr
         self.orelse = orelse
 
 

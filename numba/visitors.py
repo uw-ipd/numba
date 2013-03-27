@@ -42,7 +42,7 @@ class NumbaStatefulVisitor(object):
     func_globals = Delegate("func_env", "function_globals")
 
     def __init__(self, context, func, ast, env, **kwargs):
-        self.env = kwargs.get('env', None)
+        self.env = env
         self.context = context
         self.ast = ast
         self.func_env = env.crnt

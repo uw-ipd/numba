@@ -27,7 +27,7 @@ class NumbaStatefulVisitor(object):
     func_level = 0
 
     func = Delegate("func_env")
-    function_cache = Delegate("func_env")
+    function_cache = Delegate("context")
     symtab = Delegate("func_env")
     func_signature = Delegate("func_env")
     nopython = Delegate("func_env")

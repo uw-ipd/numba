@@ -228,6 +228,11 @@ class ControlFlowAnalysis(expanding.ControlFlowExpander):
         # Assign to target variable in body
         node.target, name_assignment = self.mark_assignment(
                 node.target, assignment=None, warn_unused=False)
+
+        # Insert assignment as first statement in the body block
+        block_stats = node.for_block.stats
+        block_stats.insert(0, block_stats.pop())
+
         if name_assignment:
             name_assignment.assignment_node = node
 

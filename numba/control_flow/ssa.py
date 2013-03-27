@@ -19,7 +19,8 @@ from numba.control_flow.debug import logger, debug
 @traits
 class SSAifier(object):
     """
-    Put the program in SSA form (single static assignment).
+    Put the program in SSA form (single static assignment), given
+    a control flow graph with abstract control flow statements.
 
     Computes the dominators for all basic blocks, computes the dominance
     frontier, renames the variables, creates the phis in the basic blocks,

@@ -161,4 +161,3 @@ def render(G, output_file, adaptor, renderer,
 
     gen.graph.write(output_file)
     write_image(output_file)
-

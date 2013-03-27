@@ -9,43 +9,66 @@ from __future__ import print_function, division, absolute_import
 import os
 import ast
 import textwrap
-from itertools import chain
+from itertools import chain, imap, ifilter
 
 from numba.viz.graphviz import render
 
 # ______________________________________________________________________
-# Adaptor
+# Utilities
 
-is_ast = lambda node: isinstance(node, (ast.AST, list))
+is_ast = lambda node: (isinstance(node, (ast.AST, list)) and not
+                       isinstance(node, ast.expr_context))
+
+class NonASTConstant(object):
+    def __init__(self, value):
+        self.value = value
+    def __repr__(self):
+        return repr(self.value)
+
+def make_list(node):
+    if isinstance(node, list):
+        return node
+    elif isinstance(node, ast.AST):
+        return [node]
+    else:
+        return [NonASTConstant(node)]
+
+def nodes(node):
+    return [getattr(node, attr) for attr in node._fields]
+
+def fields(node):
+    return zip(node._fields, nodes(node))
+
+# ______________________________________________________________________
+# Adaptor
 
 class ASTGraphAdaptor(object):
 
     def children(self, node):
-        if not is_ast(node):
-            return []
-        nodes = [getattr(node, attr) for attr in node._fields]
-        return list(chain(*[n if isinstance(n, list) else [n] for n in nodes]))
+        return list(chain(*imap(make_list, ifilter(is_ast, nodes(node)))))
 
 # ______________________________________________________________________
 # Renderer
 
+def strval(val):
+    if isinstance(val, ast.expr_context):
+        return type(val).__name__ # Load, Store, Param
+    else:
+        return str(val)
+
 class ASTGraphRenderer(object):
 
-    children = ASTGraphAdaptor().children
-    fields = lambda self, node: zip(node._fields, self.children(node))
-
     def render(self, node):
-        if not is_ast(node):
-            return str(node)
-
-        fields = self.fields(node)
-        args = ", ".join('%s=%s' % (attr, child) for attr, child in fields
-                             if not isinstance(child, ast.AST))
+        args = ", ".join(
+            '%s=%s' % (attr, strval(child)) for attr, child in fields(node)
+                                                if not is_ast(child))
         return "%s(%s)" % (type(node).__name__, args)
 
     def render_edge(self, source, dest):
-        for attr_name, attr in self.fields(source):
-            if attr is dest:
+        # See which attribute of the source node matches the destination node
+        for attr_name, attr in fields(source):
+            if attr is dest or (isinstance(attr, list) and dest in attr):
+                # node.attr == dst_node or dest_node in node.attr
                 return attr_name
 
 # ______________________________________________________________________

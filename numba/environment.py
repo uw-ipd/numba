@@ -9,7 +9,6 @@ import pprint
 import llvm.core
 
 from numba import pipeline, naming, error, reporting, PY3
-from numba.control_flow.flow import ControlFlow
 from numba.utils import TypedProperty, WriteOnceTypedProperty, NumbaContext
 from numba.minivect.minitypes import FunctionType
 from numba import functions, symtab
@@ -283,12 +282,6 @@ class FunctionEnvironment(object):
             'control_flow.dot_annotate_defs': False,
         },
     )
-
-    # TODO: Remove
-    flow = TypedProperty(
-        (types.NoneType, ControlFlow),
-        "Control flow graph. See numba.control_flow.",
-        default=None)
 
     # FIXME: Get rid of this property; pipeline stages are users and
     # transformers of the environment.  Any state needed beyond a

@@ -53,7 +53,7 @@ def build_ssa(env, ast):
         gv_ctx = None
 
     # Build CFG
-    cfflow = flow.ControlFlow(env, source_descr)
+    cfflow = flow.CFGFlow(env, source_descr)
     ast, symtab = build_cfg(ast, cfflow, env)
 
     # Run reaching defs and issue warnings/errors

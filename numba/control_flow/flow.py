@@ -85,7 +85,8 @@ class Flow(object):
         Create floating block linked to `parent` if given.
         Does NOT set the current block to the new block.
         """
-        block = self.BasicBlock(len(self.blocks), pos=pos, label=label)
+        id = len(self.blocks)
+        block = self.BasicBlock(id, pos=pos, label=label)
         self.blocks.append(block)
         if parent:
             parent.add_child(block)

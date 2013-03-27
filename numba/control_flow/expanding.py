@@ -158,7 +158,7 @@ class ControlFlowExpander(visitors.NumbaTransformer):
         with self.flow.float(node, 'exit_for') as node.exit_block:
             # Body
             node.for_block = self.flow.nextblock(node.body[0], 'for_body')
-            self.flow.loops.append(LoopDescr(node.exit_block, node.incr_block))
+            self.flow.loops.append(LoopDescr(node.exit_block, node.cond_block))
 
             self.visitlist(node.body)
             self.flow.loops.pop()

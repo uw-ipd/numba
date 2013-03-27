@@ -13,8 +13,9 @@ from numba import visitors
 from numba import symtab
 from numba import nodes
 from numba.control_flow import cfstats
+from numba.control_flow import expanding
 
-class ControlFlowAnalysis(visitors.NumbaTransformer):
+class ControlFlowAnalysis(expanding.ControlFlowExpander):
     """
     Control flow analysis pass that builds the CFG and injects the blocks
     into the AST (but not all blocks are injected).
@@ -27,9 +28,7 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
     function_level = 0
 
     def __init__(self, env, func, ast, cfflow):
-        super(ControlFlowAnalysis, self).__init__(env.context, func, ast,
-                                                  env)
-        self.flow = cfflow
+        super(ControlFlowAnalysis, self).__init__(env, func, ast, cfflow)
         self.symtab = self.initialize_symtab(allow_rebind_args=True)
 
     # ______________________________________________________________________
@@ -220,40 +219,19 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
         return node
 
     def visit_For(self, node):
-        # Evaluate iterator in previous block
-        node.iter = self.visit(node.iter)
+        node = super(ControlFlowAnalysis, self).visit_For(node)
 
-        # Start condition block
-        node.cond_block = self.flow.nextblock(node.iter, 'for_condition')
+        # Temporarily set for body block for assignment
+        block = self.flow.block
+        self.flow.block = node.for_block
 
-        # Increment temporary variable, continue should branch here
-        node.incr_block = self.flow.newblock(label="for_increment", pos=node)
-
-        with self.flow.float(node, 'exit_for') as node.exit_block:
-            # Body
-            node.for_block = self.flow.nextblock(node.body[0], 'for_body')
-            self.flow.loops.append(
-                cfstats.LoopDescr(node.exit_block, node.incr_block))
-
-            # Assign to target variable in body
-            node.target, name_assignment = self.mark_assignment(
+        # Assign to target variable in body
+        node.target, name_assignment = self.mark_assignment(
                 node.target, assignment=None, warn_unused=False)
+        if name_assignment:
+            name_assignment.assignment_node = node
 
-            self.visitlist(node.body)
-            self.flow.loops.pop()
-
-            if self.flow.block:
-                self.flow.block.add_child(node.incr_block)
-
-            # Ensure topological dominator order
-            self.flow.blocks.pop(node.incr_block.id)
-            self.flow.blocks.append(node.incr_block)
-
-            self.flow.block = node.incr_block
-
-            self.finalize_loop(node, node.cond_block, node.exit_block)
-
-            if name_assignment:
-                name_assignment.assignment_node = node
+        # Restore current block
+        self.flow.block = block
 
         return node

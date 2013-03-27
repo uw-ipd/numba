@@ -30,8 +30,7 @@ class ControlFlowAnalysis(visitors.NumbaTransformer):
         super(ControlFlowAnalysis, self).__init__(env.context, func, ast,
                                                   env)
         self.flow = cfflow
-
-        self.initialize_symtab(allow_rebind_args=True)
+        self.symtab = self.initialize_symtab(allow_rebind_args=True)
 
     # ______________________________________________________________________
 

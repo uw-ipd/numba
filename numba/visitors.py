@@ -41,9 +41,6 @@ class NumbaStatefulVisitor(object):
     kwargs = Delegate("func_env")
     func_globals = Delegate("func_env", "function_globals")
 
-    # AST node visitor
-    node_visitor = None
-
     def __init__(self, context, func, ast, env, **kwargs):
         self.env = kwargs.get('env', None)
         self.context = context
@@ -102,9 +99,21 @@ class NumbaStatefulVisitor(object):
             self.argnames = (closures.CLOSURE_SCOPE_ARG_NAME,) + self.argnames
             self.varnames.append(closures.CLOSURE_SCOPE_ARG_NAME)
 
-        self.visit = self.node_visitor.visit
-        self.generic_visit = self.node_visitor.generic_visit
-        self.visitchildren = self.node_visitor.generic_visit
+        self.visitchildren = self.generic_visit
+
+    #------------------------------------------------------------------------
+    # Visit methods
+    #------------------------------------------------------------------------
+
+    def visit(self, node):
+        """Visit a node."""
+        method = 'visit_' + node.__class__.__name__
+        visitor = getattr(self, method, self.generic_visit)
+        return visitor(node)
+
+    #------------------------------------------------------------------------
+    # Remove these
+    #------------------------------------------------------------------------
 
     @property
     def func_name(self):
@@ -241,11 +250,20 @@ class NumbaStatefulVisitor(object):
             for phi_node in block.phi_nodes:
                 self.handle_phi(phi_node)
 
+# TODO: Generate Cython visitors and AST nodes
 
 class NumbaVisitor(NumbaStatefulVisitor):
     "Non-mutating visitor"
 
-    node_visitor = ast_module.NodeVisitor()
+    def generic_visit(self, node):
+        """Called if no explicit visitor function exists for a node."""
+        for field, value in ast.iter_fields(node):
+            if isinstance(value, list):
+                for item in value:
+                    if isinstance(item, ast.AST):
+                        self.visit(item)
+            elif isinstance(value, ast.AST):
+                self.visit(value)
 
     def visitlist(self, list):
         return [self.visit(item) for item in list]
@@ -253,7 +271,28 @@ class NumbaVisitor(NumbaStatefulVisitor):
 class NumbaTransformer(NumbaStatefulVisitor):
     "Mutating visitor"
 
-    node_visitor = ast_module.NodeTransformer()
+    def generic_visit(self, node):
+        for field, old_value in ast.iter_fields(node):
+            old_value = getattr(node, field, None)
+            if isinstance(old_value, list):
+                new_values = []
+                for value in old_value:
+                    if isinstance(value, ast.AST):
+                        value = self.visit(value)
+                        if value is None:
+                            continue
+                        elif not isinstance(value, ast.AST):
+                            new_values.extend(value)
+                            continue
+                    new_values.append(value)
+                old_value[:] = new_values
+            elif isinstance(old_value, ast.AST):
+                new_node = self.visit(old_value)
+                if new_node is None:
+                    delattr(node, field)
+                else:
+                    setattr(node, field, new_node)
+        return node
 
     def visitlist(self, list):
         newlist = []

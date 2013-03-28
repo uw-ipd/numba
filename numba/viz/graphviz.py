@@ -42,11 +42,18 @@ class GraphvizGenerator(object):
         # Graph Node -> PyDot Node
         self.seen = {}
 
+        # { (source, dest) }
+        self.seen_edges = set()
+
     # ______________________________________________________________________
     # Add to pydot graph
 
     def add_edge(self, source, dest):
         "Add an edge between two pydot nodes and set the colors"
+        if (source, dest) in self.seen_edges:
+            return
+
+        self.seen_edges.add((source, dest))
         edge = pydot.Edge(self.seen[source], self.seen[dest])
 
         edge_label = self.graph_renderer.render_edge(source, dest)

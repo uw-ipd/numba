@@ -22,3 +22,4 @@ else:
     py_ssize_t = i64
 
 string = llvm.PointerType.getUnqual(i8)
+void_ptr = string

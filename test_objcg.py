@@ -24,9 +24,21 @@ def test4(a, b, c):
             c += j
     return c
 
+D = 123
+def test5(a, b, c):
+    return a + b * c / D
+
+def test6(a, b, c):
+    return test5(a, b, c)
+
+def test7(a, b, c):
+    if a > b:
+        return test7(a, b + 1, c)
+    else:
+        return c
 
 def main():
-    test = test4
+    test = test7
 
     trans = translate.translate(test)
 
@@ -40,7 +52,7 @@ def main():
     print trans.lmod
 
     exe = execution.ExecutionContext(trans.lmod)
-    callable = exe.prepare(trans.lfunc)
+    callable = exe.prepare(trans.lfunc, globals=test.func_globals)
     a, b, c = 1000, 2000, 30
 
     exp = test(a, b, c)

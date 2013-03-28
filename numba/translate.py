@@ -371,12 +371,15 @@ class Translator(object):
         return self.blocks[offset]
 
     def get_global(self, name):
-        obj = self.globals.get(name, self.builtins.get(name))
-        gv = self.get_or_insert_global(obj)
+        if name in self.globals:
+            gname = 'global.' + name
+        else:
+            gname = builtins_table[self.builtins[name]]
+        gv = self.get_or_insert_global(gname)
         return self.builder.CreateLoad(gv)
 
-    def get_or_insert_global(self, obj):
-        gname = builtins_table[obj]
+
+    def get_or_insert_global(self, gname):
         gv = self.lmod.getOrInsertGlobal('numba.%s' % gname,
                                          llvm_types.unknown_ptr)
         return gv

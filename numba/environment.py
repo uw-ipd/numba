@@ -263,6 +263,10 @@ class FunctionEnvironment(object):
         'keyword argument to the autojit decorator. '
         '({ "local_var_name" : local_var_type } for @autojit(locals=...))')
 
+    nopython = TypedProperty(
+        bool, "nopython function property",
+    )
+
     template_signature = TypedProperty(
         object, # FIXME
         'Template signature for @autojit.  E.g. T(T[:, :]).  See '
@@ -357,6 +361,7 @@ class FunctionEnvironment(object):
              closures=None, closure_scope=None,
              refcount_args=True,
              ast_metadata=None, warn=True, warnstyle='fancy',
+             nopython=False,
              **kws):
 
         self.parent = parent
@@ -364,6 +369,7 @@ class FunctionEnvironment(object):
         self.func = func
         self.ast = ast
         self.func_signature = func_signature
+        self.nopython = nopython
 
         if name is None:
             if self.func:

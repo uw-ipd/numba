@@ -85,7 +85,7 @@ class Preloader(visitors.NumbaTransformer):
         # Propagate initial conditions for variable merges to preceding
         # or post-ceding definitions (which are Name assignments or phis
         # themselves)
-        propagate_properties(self.ast.flow)
+        propagate_properties(self.env.crnt.cfg)
 
         return node
 

@@ -2,6 +2,8 @@
 from __future__ import print_function, division, absolute_import
 
 import ast
+from functools import partial
+from collections import defaultdict
 from itertools import imap, chain
 
 from numba import nodes
@@ -392,68 +394,143 @@ def iter_phi_vars(flow):
 
 # TODO: Do this before spitting out typed IR
 
-def specialize_ssa(env):
+def specialize_ssa(env, ast):
     """
     Handle phi nodes:
 
-        1) Handle incoming variables which are not initialized. Set
-           incoming_variable.uninitialized_value to a constant 'bad'
-           value (e.g. 0xbad for integers, NaN for floats, NULL for
-           objects)
+        1) Handle incoming variables which are not initialized. Create
+           constant 'bad' values (e.g. 0xbad for integers, NaN for floats,
+           NULL for objects)
 
         2) Handle incoming variables which need promotions. An incoming
            variable needs a promotion if it has a different type than
            the the phi. The promotion happens in each ancestor block that
            defines the variable which reaches us.
-
-           Promotions are set separately in the symbol table, since the
-           ancestor may not be our immediate parent, we cannot introduce
-           a rename and look up the latest version since there may be
-           multiple different promotions. So during codegen, we first
-           check whether incoming_type == phi_type, and otherwise we
-           look up the promotion in the parent block or an ancestor.
     """
-    for phi_node in iter_phis(env.crnt.cfg):
-        specialize_phi(phi_node)
+    # variable_def -> BadValue
+    badvals = {}
 
-def specialize_phi(node):
-    for parent_block, incoming_var in node.find_incoming():
+    # variable_def -> dst_type -> [PromotionNode]
+    # Remember that multiple phis may reference a single other phi
+    promotions = defaultdict(partial(defaultdict, list))
+
+    for phi_node in iter_phis(env.crnt.cfg):
+        initialize_uninitialized(phi_node, badvals)
+        promote_incoming(phi_node, promotions)
+
+    ast = merge_badvals(env, ast, badvals)
+    ast = merge_promotions(env, ast, promotions)
+
+    return ast
+
+def initialize_uninitialized(phi_node, badvals):
+    """
+    Initialize potentially uninitialized variables. For instance:
+
+        def func(A):
+            if ...:
+                x = 0
+
+            if ...:
+                use(x)
+
+    'x' may be uninitialized when it is used. So we find the implicit top
+    definition of 'x' ('x_0'), and assign a bad value.
+
+    We can find variables that need such initialization in two ways:
+
+        1) For each NameAssignment in the CFG find the variables of type
+           Uninitialized and live cf_references.
+
+        2) For each phi in the CFG see whether there is an incoming variable
+           with type Uninitialized. This finds all Uninitialized variables
+           since if the variable was /not/ an incoming variable of some phi,
+           then the variable was certainly referenced before assignment,
+           and we would have issued an error.
+    """
+    for parent_block, incoming_var in phi_node.find_incoming():
         if incoming_var.type.is_uninitialized:
-            incoming_type = incoming_var.type.base_type or node.type
+            incoming_type = incoming_var.type.base_type or phi_node.type
             bad = nodes.badval(incoming_type)
             incoming_var.type.base_type = incoming_type
-            incoming_var.uninitialized_value = bad
-            # print incoming_var
 
-        elif not incoming_var.type == node.type:
+            badvals[incoming_var] = bad
+            # incoming_var.uninitialized_value = bad
+
+def merge_badvals(env, ast, badvals):
+    ast.body = badvals.values() + ast.body
+    return ast
+
+def promote_incoming(phi_node, promotions):
+    """
+    Promote incoming definitions:
+
+        x = 0
+        if ...:
+            x = 1.0
+        # phi(x_1, x_2)
+        print x
+
+    We need to promote the definition 'x = 0' to double, i.e.:
+
+        x = 0
+          ->  [ x = 0; %0 = double(x) ]
+
+        phi(x_1, x_2)
+          -> phi(%0, x_2)
+    """
+    for parent_block, incoming_var in phi_node.find_incoming():
+        is_uninitialized = incoming_var.type.is_uninitialized
+        if not is_uninitialized and incoming_var.type != phi_node.type:
             # Create promotions for variables with phi nodes in successor
             # blocks.
-            incoming_symtab = incoming_var.block.symtab
-            if (incoming_var, node.type) not in node.block.promotions:
+            if phi_node.type not in promotions[incoming_var]:
                 # Make sure we only coerce once for each destination type and
                 # each variable
-                incoming_var.block.promotions.add((incoming_var, node.type))
 
-                # Create promotion node
+                # Create promotion phi_node
                 name_node = nodes.Name(id=incoming_var.renamed_name,
                                        ctx=ast.Load())
                 name_node.variable = incoming_var
                 name_node.type = incoming_var.type
-                coercion = name_node.coerce(node.type)
+
+                coercion = name_node.coerce(phi_node.type)
                 promotion = nodes.PromotionNode(node=coercion)
 
-                # Add promotion node to block body
-                incoming_var.block.body.append(promotion)
-                promotion.variable.block = incoming_var.block
+                promotions[incoming_var, phi_node.type] = promotion
 
-                # Update symtab
-                incoming_symtab.promotions[incoming_var.name,
-                                           node.type] = promotion
-            else:
-                promotion = incoming_symtab.lookup_promotion(
-                    incoming_var.name, node.type)
+def merge_promotions(env, ast, promotions):
+    merger = PromotionMerger(env.context, env.crnt.func, ast, env, promotions)
+    return merger.visit(ast)
 
-    return node
+class PromotionMerger(visitors.NumbaTransformer):
+    """
+    Merge in promotions in AST.
+    Promotions are generated by promote_incoming().
+    """
+
+    # TODO: This is better done on lowered IR
+
+    def __init__(self, context, func, ast, env, promotions, **kwargs):
+        super(PromotionMerger, self).__init__(context, func, ast, env, **kwargs)
+        self.promotions = promotions
+
+    def visit_Name(self, node):
+        if (isinstance(node.ctx, ast.Store) and
+                self.promotions[node.variable]):
+            promotion_nodes = self.promotions[node.variable]
+            node = nodes.ExpressionNode([node] + promotion_nodes, node)
+
+        return node
+
+    def visit_PhiNode(self, node):
+        for incoming_def in node.incoming:
+            if incoming_def in self.promotions:
+                promotion = self.promotions[incoming_def]
+                node.incoming.remove(incoming_def)
+                node.incoming.add(promotion.variable)
+
+        return node
 
 #------------------------------------------------------------------------
 # Handle phis during code generation

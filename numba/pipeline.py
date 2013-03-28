@@ -417,7 +417,7 @@ class SpecializeComparisons(PipelineStage):
 
 class SpecializeSSA(PipelineStage):
     def transform(self, ast, env):
-        ssa.specialize_ssa(env)
+        ssa.specialize_ssa(env, ast)
         return ast
 
 class SpecializeClosures(SimplePipelineStage):

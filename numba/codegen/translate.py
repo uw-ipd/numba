@@ -25,8 +25,10 @@ from numba import ndarray_helpers, error
 from numba.typesystem import is_obj
 from numba.utils import dump
 from numba import naming, metadata
+from numba.codegen import codeblocks
 from numba.functions import keep_alive
 from numba.control_flow import ssa
+from numba.control_flow import expanding
 from numba.support.numpy_support import sliceutils
 from numba.nodes import constnodes
 
@@ -60,7 +62,7 @@ _compare_mapping_uint = {'>':lc.ICMP_UGT,
 
 # TODO: use composition instead of mixins
 
-class LLVMCodeGenerator(visitors.NumbaVisitor,
+class LLVMCodeGenerator(expanding.ControlFlowExpander,
                         complexsupport.ComplexSupportMixin,
                         refcounting.RefcountingMixin,
                         visitors.NoPythonContextMixin):
@@ -78,15 +80,11 @@ class LLVMCodeGenerator(visitors.NumbaVisitor,
         True: llvm.core.Constant.int(bool_ltype, 1),
     }
 
-    def __init__(self, context, func, ast, func_signature, symtab,
-                 optimize=True, nopython=False,
-                 llvm_module=None, **kwds):
+    def __init__(self, context, func, ast, func_signature, env,
+                 optimize=True, **kwds):
 
-        super(LLVMCodeGenerator, self).__init__(
-                    context, func, ast, func_signature=func_signature,
-                    nopython=nopython, symtab=symtab,
-                    llvm_module=llvm_module,
-                    **kwds)
+        flow = codeblocks.CodeFlow(env)
+        super(LLVMCodeGenerator, self).__init__(env, func, ast, flow)
 
         # FIXME: Change mangled_name to some other attribute,
         # optionally read in the environment.  What we really want to
@@ -95,12 +93,8 @@ class LLVMCodeGenerator(visitors.NumbaVisitor,
         # translated.
         self.mangled_name = self.env.translation.crnt.mangled_name
 
-        self.func_signature = func_signature
-        self.blocks = {} # stores id => basic-block
-
         self.refcount_args = self.env.crnt.refcount_args
 
-        # self.ma_obj = None # What is this?
         self.optimize = optimize
         self.flags = kwds
 

@@ -67,9 +67,8 @@ class Flow(object):
     # BasicBlock class
     BasicBlock = None
 
-    def __init__(self, env, source_descr):
+    def __init__(self, env):
         self.env = env
-        self.source_descr = source_descr
 
         self.blocks = []
         self.entries = set()

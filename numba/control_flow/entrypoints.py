@@ -5,21 +5,14 @@ Control flow for the AST backend.
 
 Adapted from Cython/Compiler/FlowControl.py
 """
+
 from __future__ import print_function, division, absolute_import
 
-import ast
-
-from numba import reporting
-
-from numba import *
 from numba.control_flow import ssa
 from numba.control_flow import flow
 from numba.control_flow import control_flow
-from numba.control_flow import graphviz
 from numba.control_flow import reaching
 from numba.control_flow import cfwarnings
-from numba.control_flow.debug import *
-
 
 #---------------------------------------------------------------------------
 # Control Flow Pipeline
@@ -45,15 +38,9 @@ def build_ssa(env, ast):
 
     # Graphviz
     dotfile = env.crnt.cfdirectives['control_flow.dot_output']
-    if dotfile:
-        gv_ctx = graphviz.GVContext()
-        source_descr = reporting.SourceDescr(env.crnt.func, ast)
-    else:
-        source_descr = None
-        gv_ctx = None
 
     # Build CFG
-    cfflow = flow.CFGFlow(env, source_descr)
+    cfflow = flow.CFGFlow(env)
     ast, symtab = build_cfg(ast, cfflow, env)
 
     # Run reaching defs and issue warnings/errors
@@ -64,8 +51,5 @@ def build_ssa(env, ast):
     ssa_maker.compute_dominators()
     ssa_maker.compute_dominance_frontier()
     ssa_maker.update_for_ssa(ast, symtab)
-
-    if dotfile:
-        graphviz.render_gv(ast, gv_ctx, flow, env.crnt.cfdirectives)
 
     return symtab, cfflow

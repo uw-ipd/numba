@@ -90,13 +90,6 @@ class GraphAdaptor(object):
     def children(self, node):
         "Return the children for this graph node"
 
-
-
-class SSAGraphAdaptor(object):
-
-    def children(self, node):
-        return node.cf_references
-
 #------------------------------------------------------------------------
 # Graph Rendering
 #------------------------------------------------------------------------
@@ -112,14 +105,6 @@ class GraphRenderer(object):
     def render_edge(self, source, dest):
         "Return the label for this edge or None"
 
-
-class SSAGraphRenderer(object):
-
-    def render(self, node):
-        return node.renamed_name or node.name
-
-    def render_edge(self, source, dest):
-        return "use"
 
 #------------------------------------------------------------------------
 # Create image from dot

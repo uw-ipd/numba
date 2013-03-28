@@ -26,13 +26,16 @@ from numba.external.utility import default_utility_library
 
 logger = logging.getLogger(__name__)
 
-default_pipeline_order = [
+default_normalize_order = [
     'ast3to2',
     'resolve_templates',
     'validate_signature',
     'update_signature',
     'create_lfunc1',
     'NormalizeASTStage',
+]
+
+default_pipeline_order = default_normalize_order + [
     'ControlFlowAnalysis',
     #'ConstFolding',
     'TypeInfer',
@@ -742,6 +745,8 @@ class NumbaEnvironment(_AbstractNumbaEnvironment):
             default_pipeline_order)
         self.pipelines = {
             self.default_pipeline : actual_default_pipeline,
+            'normalize' : pipeline.ComposedPipelineStage(
+                default_normalize_order),
             'type_infer' : pipeline.ComposedPipelineStage(
                 default_type_infer_pipeline_order),
             'dummy_type_infer' : pipeline.ComposedPipelineStage(

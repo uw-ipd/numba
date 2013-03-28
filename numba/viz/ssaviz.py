@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 """
-Visualize an AST.
+Visualize an SSA graph.
 """
 
 from __future__ import print_function, division, absolute_import
@@ -14,6 +14,7 @@ from numba import void
 from numba import pipeline
 from numba import environment
 from numba.viz.graphviz import render
+from numba.viz.cfgviz import cf_from_source
 from numba.control_flow import entrypoints
 from numba.control_flow.cfstats import NameAssignment
 
@@ -50,20 +51,7 @@ def render_ssa(cfflow, symtab, output_file):
 
 def render_ssa_from_source(source, output_file, func_globals=()):
     "Render the SSA graph given python source code"
-    mod = ast.parse(source)
-    func_ast = mod.body[0]
-
-    env = environment.NumbaEnvironment.get_environment()
-    func_env, _ = pipeline.run_pipeline2(env, None, func_ast, void(),
-                                         pipeline_name='normalize',
-                                         function_globals=dict(func_globals))
-
-    env.translation.push_env(func_env)
-    try:
-        symtab, cfflow = entrypoints.build_ssa(env, func_env.ast)
-    finally:
-        env.translation.pop()
-
+    symtab, cfflow = cf_from_source(source, func_globals)
     render_ssa(cfflow, symtab, output_file)
 
 # ______________________________________________________________________
@@ -72,14 +60,17 @@ def render_ssa_from_source(source, output_file, func_globals=()):
 if __name__ == '__main__':
     source = textwrap.dedent("""
         def func():
-            x = 0
+            # x_0
+            x = 0 # x_1
+            # x_2
             for i in range(10):
                 if i < 5:
-                    x = i
-                x += i
+                    x = i # x_3
+                # x_4
+                x = x + i # x_5
 
             y = x
-            x = i
+            x = i # x_6
     """)
 
     render_ssa_from_source(source, os.path.expanduser("~/ssa.dot"))

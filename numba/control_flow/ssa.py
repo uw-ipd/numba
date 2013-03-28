@@ -215,7 +215,7 @@ class SSAifier(object):
         ### 3) Update the phis with all incoming entries
         #
         for block in self.blocks:
-            # Insert phis in AST
+            # Insert phis in CFG
             block.phi_nodes = block.phis.values()
             for variable, phi in block.phis.iteritems():
                 for parent in block.parents:

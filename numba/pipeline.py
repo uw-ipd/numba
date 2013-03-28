@@ -327,8 +327,9 @@ class ControlFlowAnalysis(PipelineStage):
         return True
 
     def transform(self, ast, env):
-        symtab, _ = cfentrypoints.build_ssa(env, ast)
-        env.translation.crnt.symtab = symtab
+        symtab, cfg = cfentrypoints.build_ssa(env, ast)
+        env.crnt.symtab = symtab
+        env.crnt.cfg = cfg
         return ast
 
 class ConstFolding(PipelineStage):
@@ -416,7 +417,7 @@ class SpecializeComparisons(PipelineStage):
 
 class SpecializeSSA(PipelineStage):
     def transform(self, ast, env):
-        ssa.specialize_ssa(ast)
+        ssa.specialize_ssa(env)
         return ast
 
 class SpecializeClosures(SimplePipelineStage):

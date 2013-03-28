@@ -164,13 +164,12 @@ class TypeInferer(visitors.NumbaTransformer):
 
         self.func_signature.args = tuple(arg_types)
 
-        self.have_cfg = hasattr(self.ast, 'flow')
-        if self.have_cfg:
+        if self.env.crnt.cfg:
             self.deferred_types = []
             self.resolve_variable_types()
 
         if debug and self.have_cfg:
-            for block in self.ast.flow.blocks:
+            for block in self.env.crnt.cfg.blocks:
                 for var in block.symtab.values():
                     if var.type and var.cf_references:
                         assert not var.type.is_unresolved
@@ -250,7 +249,7 @@ class TypeInferer(visitors.NumbaTransformer):
         """
         Analyze all variable assignments and phis.
         """
-        cfg = self.ast.flow
+        cfg = self.env.crnt.cfg
         ssa.kill_unused_phis(cfg)
 
         self.analyse = False
@@ -369,7 +368,7 @@ class TypeInferer(visitors.NumbaTransformer):
         # Find all unresolved variables
         #-------------------------------------------------------------------
         unresolved = oset.OrderedSet()
-        for block in self.ast.flow.blocks:
+        for block in self.env.crnt.cfg.blocks:
             for variable in block.symtab.itervalues():
                 if variable.parent_var: # renamed variable
                     if variable.type.is_unresolved:
@@ -1595,8 +1594,8 @@ class TypeSettingVisitor(visitors.NumbaTransformer):
 
     def visit_FunctionDef(self, node):
         self.generic_visit(node)
-        if node.flow:
-            for block in node.flow.blocks:
+        if self.env.crnt.cfg:
+            for block in self.env.crnt.cfg.blocks:
                 for phi in block.phi_nodes:
                     self.handle_phi(phi)
 

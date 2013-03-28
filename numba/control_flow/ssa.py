@@ -392,7 +392,7 @@ def iter_phi_vars(flow):
 
 # TODO: Do this before spitting out typed IR
 
-def specialize_ssa(funcdef):
+def specialize_ssa(env):
     """
     Handle phi nodes:
 
@@ -413,7 +413,7 @@ def specialize_ssa(funcdef):
            check whether incoming_type == phi_type, and otherwise we
            look up the promotion in the parent block or an ancestor.
     """
-    for phi_node in iter_phis(funcdef.flow):
+    for phi_node in iter_phis(env.crnt.cfg):
         specialize_phi(phi_node)
 
 def specialize_phi(node):

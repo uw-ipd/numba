@@ -14,6 +14,7 @@ from numba.minivect.minitypes import FunctionType
 from numba import functions, symtab
 from numba.utility.cbuilder import library
 from numba.nodes import metadata
+from numba.control_flow import flow
 from numba.codegen import translate
 from numba.codegen import globalconstants
 
@@ -273,6 +274,10 @@ class FunctionEnvironment(object):
 
     warn = True
 
+    cfg = TypedProperty(
+        flow.CFGFlow,
+        "Control flow graph, input to type inferencer.")
+
     cfdirectives = TypedProperty(
         dict, "Directives for control flow.",
         default={
@@ -433,7 +438,7 @@ class FunctionEnvironment(object):
             function_globals=self.function_globals,
             locals=self.locals,
             template_signature=self.template_signature,
-            cfg_transform=self.cfg_transform,
+            cfg=self.cfg,
             is_closure=self.is_closure,
             closures=self.closures,
             closure_scope=self.closure_scope,

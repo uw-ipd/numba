@@ -1,21 +1,16 @@
 # -*- coding: utf-8 -*-
 
 """
-Visualize an SSA graph.
+Visualize an SSA graph (the def/use chains).
 """
 
 from __future__ import print_function, division, absolute_import
 
 import os
-import ast
 import textwrap
 
-from numba import void
-from numba import pipeline
-from numba import environment
 from numba.viz.graphviz import render
 from numba.viz.cfgviz import cf_from_source
-from numba.control_flow import entrypoints
 from numba.control_flow.cfstats import NameAssignment
 
 # ______________________________________________________________________
@@ -67,7 +62,7 @@ if __name__ == '__main__':
                 if i < 5:
                     x = i # x_3
                 # x_4
-                x = x + i # x_5
+                # x = x + i # x_5
 
             y = x
             x = i # x_6

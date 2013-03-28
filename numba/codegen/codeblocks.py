@@ -6,6 +6,8 @@ Control flow basic blocks.
 
 from __future__ import print_function, division, absolute_import
 
+import functools
+
 from numba.control_flow import flow
 from numba.control_flow import basicblocks
 
@@ -23,9 +25,8 @@ class CodeBlock(basicblocks.BasicBlock):
 
     # TODO: Make this generate custom Labels and Branches
 
-    def __init__(self, builder, lfunc, id, label, pos):
+    def __init__(self, lfunc, id, label, pos):
         super(CodeBlock, self).__init__(id, label, pos)
-        self.builder = builder
         self.lfunc = lfunc
         self.llvm_block = self.lfunc.append_basic_block(label)
 
@@ -35,7 +36,9 @@ class CodeBlock(basicblocks.BasicBlock):
 
 class CodeFlow(flow.Flow):
 
-    BasicBlock = CodeBlock
+    def __init__(self, env):
+        self.BasicBlock = functools.partial(CodeBlock, env.crnt.lfunc)
+        super(CodeFlow, self).__init__(env)
 
 #----------------------------------------------------------------------------
 # CFG Lowering

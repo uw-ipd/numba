@@ -246,7 +246,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
                 self.error(self.ast, "Function with non-void return does "
                                      "not return a value")
 
-        self.lfunc = self.env.translation.crnt.lfunc
+        self.lfunc = self.env.crnt.lfunc
         assert self.lfunc
         if not isinstance(self.ast, nodes.FunctionWrapperNode):
             assert self.mangled_name == self.lfunc.name, \
@@ -254,7 +254,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
                                                              self.mangled_name,
                                                              self.lfunc.name)
 
-        entry = self.append_basic_block('entry')
+        entry = self.flow.entry_point.llvm_block
 
         self.builder = lc.Builder.new(entry)
         self.caster = _LLVMCaster(self.builder)
@@ -267,20 +267,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         self._init_args()
         self._allocate_locals()
 
-        # TODO: Put current function into symbol table for recursive call
         self.setup_return()
-
-        block0 = self.ast.flow.blocks[0]
-        block0.entry_block = entry
-        self.visitlist(block0.body)
-        block0.exit_block = self.builder.basic_block
-        self.flow_block = None
-        # self.visitlist(block0.body) # uninitialize constants for variables
-        self.flow_block = self.ast.flow.blocks[1]
-
-        self.in_loop = 0
-        self.loop_beginnings = []
-        self.loop_exits = []
 
     def to_llvm(self, type):
         return type.to_llvm(self.context)
@@ -337,22 +324,9 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         Update all our phi nodes after translation is done and all Variables
         have their llvm values set.
         """
-        if not self.have_cfg:
-            return
-
-        # Initialize uninitialized incoming values to bad values
-        for phi in ssa.iter_phi_vars(self.ast.flow):
-            if phi.type.is_uninitialized:
-                #print incoming_var.cf_references
-                #print phi_node.variable.cf_references
-                #print "incoming", phi_node.incoming, block
-
-                assert phi.uninitialized_value, phi
-                assert phi.lvalue is None
-                phi.lvalue = self.visit(phi.uninitialized_value)
-
         # Add all incoming values to all our phi values
-        ssa.handle_phis(self.ast.flow)
+        # TODO: Redo this better
+        ssa.handle_phis(self.env.crnt.cfg)
 
     def visit_FunctionWrapperNode(self, node):
         # Disable debug coercion
@@ -629,84 +603,17 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
     # Control Flow
     #------------------------------------------------------------------------
 
-    def _init_phis(self, node):
-        "Set basic block and initialize LLVM phis"
-        for phi_node in node.phi_nodes:
-            ltype = phi_node.variable.type.to_llvm(self.context)
-            phi = self.builder.phi(ltype, phi_node.variable.unmangled_name)
-            phi_node.variable.lvalue = phi
-
-            if phi_node.variable.type.is_array:
-                nodes.make_preload_phi(self.context, self.builder, phi_node)
-
-    def setblock(self, cfg_basic_block):
-        if cfg_basic_block.is_fabricated:
-            return
-
-        old = self.flow_block
-        if old and not old.exit_block:
-            if old.id == 1:
-                # Handle promotions from the entry block. This is somewhat
-                # of a hack, and needed since the CFG isn't properly merged
-                # in the AST
-                self.visitlist(old.body)
-            old.exit_block = self.builder.basic_block
-
-        self.flow_block = cfg_basic_block
-
-    def append_basic_block(self, name='unamed'):
-        idx = len(self.blocks)
-        #bb = self.lfunc.append_basic_block('%s_%d'%(name, idx))
-        bb = self.lfunc.append_basic_block(name)
-        self.blocks[idx] = bb
-        return bb
-
     def visit_PromotionNode(self, node):
         lvalue = self.visit(node.node)
         node.variable.lvalue = lvalue
-        # Update basic block in case the promotion created a new block
-        self.flow_block.exit_block = self.builder.basic_block
 
-    def visit_ControlBlock(self, node):
-        """
-        Return a new basic block and handle phis and promotions. Promotions
-        are needed at merge (phi) points to have a consistent type.
-        """
-        #
-        ### Create entry basic block
-        #
-        if node is None:
-            # Fabricated If statement
-            label = 'fabricated_basic_block'
-        else:
-            label = node.label
+    def visit_PhiNode(self, phi_node):
+        ltype = phi_node.variable.type.to_llvm(self.context)
+        phi = self.builder.phi(ltype, phi_node.variable.unmangled_name)
+        phi_node.variable.lvalue = phi
 
-        self.setblock(node)
-        node.prev_block = self.builder.basic_block
-        node.entry_block = node.create_block(self, label)
-        if node.branch_here and not self.is_block_terminated():
-            self.builder.branch(node.entry_block)
-
-        self.builder.position_at_end(node.entry_block)
-        self._init_phis(node)
-
-        if len(node.body) == 1:
-            lbody = self.visit(node.body[0])
-        else:
-            self.visitlist(node.body)
-            lbody = None
-
-        if not node.exit_block:
-            node.exit_block = self.builder.basic_block
-
-        return lbody
-
-    def visit_LowLevelBasicBlockNode(self, node):
-        llvm_block = node.create_block(self)
-        if not self.is_block_terminated():
-            self.builder.branch(llvm_block)
-        self.builder.position_at_end(llvm_block)
-        return self.visit(node.body)
+        if phi_node.variable.type.is_array:
+            nodes.make_preload_phi(self.context, self.builder, phi_node)
 
     #------------------------------------------------------------------------
     # Control Flow: If, For, While
@@ -749,11 +656,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         return phi
 
     def append_basic_block(self, name='unamed'):
-        idx = len(self.blocks)
-        #bb = self.lfunc.append_basic_block('%s_%d'%(name, idx))
-        bb = self.lfunc.append_basic_block(name)
-        self.blocks[idx] = bb
-        return bb
+        return self.lfunc.append_basic_block(name)
 
     #------------------------------------------------------------------------
     # Control Flow: Return

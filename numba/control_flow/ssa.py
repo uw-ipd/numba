@@ -457,9 +457,15 @@ def initialize_uninitialized(phi_node, badvals):
             badvals[incoming_var] = bad
             # incoming_var.uninitialized_value = bad
 
-def merge_badvals(env, ast, badvals):
-    ast.body = badvals.values() + ast.body
-    return ast
+def merge_badvals(env, func_ast, badvals):
+    assmnts = []
+    for var in badvals:
+        name = nodes.Name(id=var.renamed_name, ctx=ast.Store())
+        name.variable = var
+        assmnts.append(ast.Assign(targets=[name], value=badvals[var]))
+
+    func_ast.body = assmnts + func_ast.body
+    return func_ast
 
 def promote_incoming(phi_node, promotions):
     """
@@ -582,8 +588,5 @@ def handle_phis(flow):
     Update all our phi nodes after translation is done and all Variables
     have their llvm values set.
     """
-    if flow is None:
-        return
-
     for phi_node in iter_phis(flow):
         process_incoming(phi_node)

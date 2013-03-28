@@ -35,7 +35,6 @@ class NumbaStatefulVisitor(object):
     llvm_module = Delegate("func_env")
     local_scopes = Delegate("func_env")
     current_scope = Delegate("func_env")
-    have_cfg = Delegate("func_env")
     closures = Delegate("func_env")
     is_closure = Delegate("func_env")
     kwargs = Delegate("func_env")

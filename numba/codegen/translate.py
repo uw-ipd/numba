@@ -151,8 +151,7 @@ class LLVMCodeGenerator(visitors.NumbaVisitor,
         return stackspace
 
     def renameable(self, variable):
-        renameable = self.have_cfg and (not variable or variable.renameable)
-        return renameable
+        return not variable or variable.renameable
 
     def incref_arg(self, argname, argtype, larg, variable):
         # TODO: incref objects in structs
@@ -277,16 +276,13 @@ class LLVMCodeGenerator(visitors.NumbaVisitor,
         # TODO: Put current function into symbol table for recursive call
         self.setup_return()
 
-        if self.have_cfg:
-            block0 = self.ast.flow.blocks[0]
-            block0.entry_block = entry
-            self.visitlist(block0.body)
-            block0.exit_block = self.builder.basic_block
-            self.flow_block = None
-            # self.visitlist(block0.body) # uninitialize constants for variables
-            self.flow_block = self.ast.flow.blocks[1]
-        else:
-            self.flow_block = None
+        block0 = self.ast.flow.blocks[0]
+        block0.entry_block = entry
+        self.visitlist(block0.body)
+        block0.exit_block = self.builder.basic_block
+        self.flow_block = None
+        # self.visitlist(block0.body) # uninitialize constants for variables
+        self.flow_block = self.ast.flow.blocks[1]
 
         self.in_loop = 0
         self.loop_beginnings = []

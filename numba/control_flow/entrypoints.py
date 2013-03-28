@@ -68,4 +68,4 @@ def build_ssa(env, ast):
     if dotfile:
         graphviz.render_gv(ast, gv_ctx, flow, env.crnt.cfdirectives)
 
-    return symtab
+    return symtab, cfflow

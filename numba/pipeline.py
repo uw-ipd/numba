@@ -327,7 +327,7 @@ class ControlFlowAnalysis(PipelineStage):
         return True
 
     def transform(self, ast, env):
-        symtab = cfentrypoints.build_ssa(env, ast)
+        symtab, _ = cfentrypoints.build_ssa(env, ast)
         env.translation.crnt.symtab = symtab
         return ast
 

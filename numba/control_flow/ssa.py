@@ -158,6 +158,12 @@ class SSAifier(object):
             for block in self.blocks:
                 print(('DF(%d) = %s' % (block.id, block.dominance_frontier)))
 
+        # Clear cf_references, we will only keep SSA references for each def
+        for block in self.blocks:
+            for stat in block.stats:
+                if isinstance(stat, NameAssignment):
+                    stat.entry.cf_references = []
+
         argnames = [name.id for name in ast.args.args]
 
         #

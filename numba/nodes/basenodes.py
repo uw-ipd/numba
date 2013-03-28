@@ -57,6 +57,7 @@ class Name(ast.Name, ExprNode):
         super(Name, self).__init__(*args, **kwargs)
         self.id = self.name = id
         self.ctx = ctx
+        self.check_unbound = None
 
     def __repr__(self):
         type = getattr(self, 'type', "")

@@ -5,6 +5,7 @@ define the transformations and the order in which they run on the AST.
 """
 from __future__ import print_function, division, absolute_import
 
+import os
 import ast as ast_module
 import logging
 import pprint
@@ -23,6 +24,7 @@ from numba import closures
 from numba import reporting
 from numba import normalize
 from numba.control_flow import ssa
+from numba.viz import astviz
 from numba.control_flow import entrypoints as cfentrypoints
 from numba.codegen import llvmwrapper
 from numba import ast_constant_folding as constant_folding
@@ -307,6 +309,8 @@ def create_lfunc3(tree, env):
     create_lfunc(tree, env)
     return tree
 
+def dump_ast(ast, env):
+    astviz.render_ast(ast, os.path.expanduser("~/ast.dot"))
 
 class NormalizeASTStage(PipelineStage):
     def transform(self, ast, env):

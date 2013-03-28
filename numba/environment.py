@@ -61,6 +61,7 @@ default_pipeline_order = default_normalize_order + [
     'SpecializeExceptions',
     'FixASTLocations',
     'cleanup_symtab',
+    'dump_ast',
     'CodeGen',
     'LinkingStage',
     'WrapperStage',

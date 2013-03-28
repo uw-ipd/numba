@@ -712,59 +712,16 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
     # Control Flow: If, For, While
     #------------------------------------------------------------------------
 
-    def visit_If(self, node, is_while=False):
-        if not hasattr(node, 'cond_block'):
-            # We have a synthetic 'if' without a cfg, fabricate fake blocks
-            node = nodes.build_if(**vars(node))
+    def visit_If(self, node):
+        node = super(LLVMCodeGenerator, self).visit_If(node)
+        bb_cond = node.cond_block.llvm_block
+        self.builder.position_at_end(bb_cond)
+        self.builder.cbranch(
+            test, *[b.llvm_block for b in node.cond_block.children])
+        self.builder.position_at_end(node.exit_block.llvm_block)
 
-        # Visit condition
-        test = self.visit(node.test)
-
-        bb_cond = node.cond_block.entry_block
-        # test = self.visit(node.test)
-        if test.type != _int1:
-            test = self._generate_test(test)
-
-        # Create exit block
-        self.visit_ControlBlock(node.exit_block)
-        bb_endif = node.exit_block.entry_block
-        if is_while:
-            self.setup_loop(node.continue_block, bb_cond, bb_endif)
-
-        # Visit if clauses
-        self.visitlist(node.body)
-        #if self.have_cfg:
-        #    self.flow_block.exit_block = self.builder.basic_block
-
-        bb_true = node.if_block.entry_block
-        if is_while:
-            if not self.is_block_terminated():
-                self.builder.branch(bb_cond)
-            self.teardown_loop()
-        else:
-            self.term_block(bb_endif)
-
-        if node.orelse:
-            self.visitlist(node.orelse)
-            bb_false = node.else_block.entry_block
-            self.term_block(bb_endif)
-        else:
-            bb_false = bb_endif
-
-        # Mark current basic block and the exit block of the body
-        self.setblock(node.exit_block)
-
-        # Branch to block from condition
-        self.builder.position_at_end(node.cond_block.prev_block)
-        self.builder.branch(bb_cond)
-
-        self.builder.position_at_end(node.cond_block.exit_block)
-        # assert not self.is_block_terminated()
-        self.builder.cbranch(test, bb_true, bb_false)
-        self.builder.position_at_end(node.exit_block.exit_block)
-
-        # Swallow statements following the branch
-        node.exit_block.exit_block = None
+    def visit_For(self, node):
+        raise error.NumbaError(node, "This node should have been replaced")
 
     def visit_IfExp(self, node):
         test = self.visit(node.test)
@@ -791,69 +748,12 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         phi.add_incoming(else_value, else_block)
         return phi
 
-    def visit_While(self, node):
-        self.visit_If(node, is_while=True)
-
-    def term_block(self, end_block):
-        if not self.is_block_terminated():
-            self.terminate_block(self.builder.basic_block, end_block)
-
     def append_basic_block(self, name='unamed'):
         idx = len(self.blocks)
         #bb = self.lfunc.append_basic_block('%s_%d'%(name, idx))
         bb = self.lfunc.append_basic_block(name)
         self.blocks[idx] = bb
         return bb
-
-    @property
-    def cur_bb(self):
-        return self.builder.basic_block
-
-    def is_block_terminated(self, basic_block=None):
-        '''
-        Check if the current basicblock is properly terminated.
-        That means the basicblock is ended with a branch or return
-        '''
-        basic_block = basic_block or self.cur_bb
-        instructions = basic_block.instructions
-        return instructions and instructions[-1].is_terminator
-
-    def terminate_block(self, block, end_block):
-        if not self.is_block_terminated(block):
-            bb = self.cur_bb
-            self.builder.position_at_end(block)
-            self.builder.branch(end_block)
-            self.builder.position_at_end(bb)
-
-    def setup_loop(self, continue_block, bb_cond, bb_exit):
-        if continue_block:
-            # Jump to target index increment block instead of while condition
-            # block for 'for i in range(...):' loops
-            bb_cond = continue_block.create_block(self)
-
-        self.loop_beginnings.append(bb_cond)
-        self.loop_exits.append(bb_exit)
-        self.in_loop += 1
-
-    def teardown_loop(self):
-        self.loop_beginnings.pop()
-        self.loop_exits.pop()
-        self.in_loop -= 1
-
-    def visit_For(self, node):
-        raise error.NumbaError(node, "This node should have been replaced")
-
-    #------------------------------------------------------------------------
-    # Control Flow: Break, Continue
-    #------------------------------------------------------------------------
-
-    def visit_Continue(self, node):
-        assert self.loop_beginnings # Python syntax should ensure this
-        self.builder.branch(self.loop_beginnings[-1])
-
-    def visit_Break(self, node):
-        assert self.loop_exits # Python syntax should ensure this
-        self.builder.branch(self.loop_exits[-1])
 
     #------------------------------------------------------------------------
     # Control Flow: Return

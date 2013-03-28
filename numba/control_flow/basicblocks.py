@@ -6,6 +6,8 @@ Control flow basic blocks.
 
 from __future__ import print_function, division, absolute_import
 
+from numba.oset import OrderedSet
+
 #----------------------------------------------------------------------------
 # CFG basic blocks
 #----------------------------------------------------------------------------
@@ -32,8 +34,8 @@ class BasicBlock(object):
         self.label = label
         self.pos = pos
 
-        self.children = set()
-        self.parents = set()
+        self.children = OrderedSet()
+        self.parents = OrderedSet()
         self.positions = set()
 
     def detach(self):

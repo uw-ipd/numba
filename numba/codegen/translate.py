@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function, division, absolute_import
 import ast
+from distutils.command.clean import clean
 
 import llvm
 import llvm.core as lc
@@ -254,9 +255,9 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
                                                              self.mangled_name,
                                                              self.lfunc.name)
 
-        entry = self.flow.entry_point.llvm_block
+        self.entry = self.flow.entry_point.llvm_block
 
-        self.builder = lc.Builder.new(entry)
+        self.builder = lc.Builder.new(self.entry)
         self.caster = _LLVMCaster(self.builder)
         self.object_coercer = coerce.ObjectCoercer(self)
         self.multiarray_api.set_PyArray_API(self.llvm_module)
@@ -276,26 +277,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         self.lfunc = None
         try:
             self.setup_func()
-            if isinstance(self.ast, ast.FunctionDef):
-                # Handle the doc string for the function
-                # FIXME: Ignoring it for now
-                if (isinstance(self.ast.body[0], ast.Expr) and
-                    isinstance(self.ast.body[0].value, ast.Str)):
-                    # Python doc string
-                    logger.info('Ignoring python doc string.')
-                    statements = self.ast.body[1:]
-                else:
-                    statements = self.ast.body
-
-                for node in statements: # do codegen for each statement
-                    self.visit(node)
-            else:
-                self.visit(self.ast)
-
-            if not self.is_block_terminated():
-                # self.builder.ret_void()
-                self.builder.branch(self.cleanup_label)
-
+            self.visit_ast()
             self.handle_phis()
             self.terminate_cleanup_blocks()
 
@@ -327,27 +309,6 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         # Add all incoming values to all our phi values
         # TODO: Redo this better
         ssa.handle_phis(self.env.crnt.cfg)
-
-    def visit_FunctionWrapperNode(self, node):
-        # Disable debug coercion
-        was_debug_conversion = debug.debug_conversion
-        debug.debug_conversion = False
-
-        # Unpack tuple into arguments
-        arg_types = [object_] * node.wrapped_nargs
-        types, lstr = self.object_coercer.lstr(arg_types)
-        args_tuple = self.lfunc.args[1]
-        largs = self.object_coercer.parse_tuple(lstr, args_tuple, arg_types)
-
-        # Patch argument values in LLVMValueRefNode nodes
-        assert len(largs) == node.wrapped_nargs
-        for larg, arg_node in zip(largs, node.wrapped_args):
-            arg_node.llvm_value = larg
-
-        # Generate call to wrapped function
-        self.generic_visit(node)
-
-        debug.debug_conversion = was_debug_conversion
 
     @property
     def lfunc_pointer(self):
@@ -397,27 +358,17 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
                                                args=[const]))
 
     def setup_return(self):
-        # Assign to this value which will be returned
+        # TODO: do this better
+        # Assign to this the value which will be returned
         self.is_void_return = \
                 self.func_signature.actual_signature.return_type.is_void
+
         if self.func_signature.struct_by_reference:
             self.return_value = self.lfunc.args[-1]
         elif not self.is_void_return:
             llvm_ret_type = self.func_signature.return_type.to_llvm(self.context)
             self.return_value = self.builder.alloca(llvm_ret_type,
                                                     "return_value")
-
-        # All non-NULL object emporaries are DECREFed here
-        self.cleanup_label = self.append_basic_block('cleanup_label')
-        self.current_cleanup_bb = self.cleanup_label
-
-        bb = self.builder.basic_block
-        # Jump here in case of an error
-        self.error_label = self.append_basic_block("error_label")
-        self.builder.position_at_end(self.error_label)
-        # Set error return value and jump to cleanup
-        self.visit(self.ast.error_return)
-        self.builder.position_at_end(bb)
 
     def terminate_cleanup_blocks(self):
         self.builder.position_at_end(self.current_cleanup_bb)
@@ -460,6 +411,61 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
 
     def visit_Attribute(self, node):
         raise error.NumbaError("This node should have been replaced")
+
+    #------------------------------------------------------------------------
+    # Outer function level
+    #------------------------------------------------------------------------
+
+    def visit_ast(self):
+        cleanup_block = self.flow.newblock(self.ast, "cleanup")
+        error_block = self.flow.newblock(self.ast, "error")
+
+        # Jump here in case of an error
+        self.error_label = error_block.llvm_block
+        self.builder.position_at_end(self.error_label)
+
+        # Set error return value and jump to cleanup
+        self.visit(self.ast.error_return)
+        self.builder.position_at_end(self.entry)
+
+        if isinstance(self.ast, ast.FunctionDef):
+            if (isinstance(self.ast.body[0], ast.Expr) and
+                isinstance(self.ast.body[0].value, ast.Str)):
+                # Python doc string
+                statements = self.ast.body[1:]
+            else:
+                statements = self.ast.body
+
+            self.visitlist(statements)
+        else:
+            self.visit(self.ast)
+
+        if self.block:
+            self.block.add_child(cleanup_block)
+
+        cleanup_block.add_child(error_block)
+        self.flow.blocks.extend([cleanup_block, error_block])
+
+    def visit_FunctionWrapperNode(self, node):
+        # Disable debug coercion
+        was_debug_conversion = debug.debug_conversion
+        debug.debug_conversion = False
+
+        # Unpack tuple into arguments
+        arg_types = [object_] * node.wrapped_nargs
+        types, lstr = self.object_coercer.lstr(arg_types)
+        args_tuple = self.lfunc.args[1]
+        largs = self.object_coercer.parse_tuple(lstr, args_tuple, arg_types)
+
+        # Patch argument values in LLVMValueRefNode nodes
+        assert len(largs) == node.wrapped_nargs
+        for larg, arg_node in zip(largs, node.wrapped_args):
+            arg_node.llvm_value = larg
+
+        # Generate call to wrapped function
+        self.generic_visit(node)
+
+        debug.debug_conversion = was_debug_conversion
 
     #------------------------------------------------------------------------
     # Assignment
@@ -624,7 +630,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         bb_cond = node.cond_block.llvm_block
         self.builder.position_at_end(bb_cond)
         self.builder.cbranch(
-            test, *[b.llvm_block for b in node.cond_block.children])
+            node.test, *[b.llvm_block for b in node.cond_block.children])
         self.builder.position_at_end(node.exit_block.llvm_block)
 
     def visit_For(self, node):
@@ -683,17 +689,8 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
 
             self.builder.store(retval, self.return_value)
 
-            ret_type = self.func_signature.return_type
             if is_obj(rettype):
                 self.xincref_temp(self.return_value)
-
-        if not self.is_block_terminated():
-            self.builder.branch(self.cleanup_label)
-
-        # if node.value is not None:
-        #     self.builder.ret(self.visit(node.value))
-        # else:
-        #     self.builder.ret_void()
 
     def visit_Suite(self, node):
         self.visitlist(node.body)

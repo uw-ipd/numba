@@ -5,7 +5,7 @@ from . import llvm_types
 
 def make_engine(lmod, opt=2):
     llvm.InitializeNativeTarget()
-    engine = llvm.EngineBuilder.new(lmod).setOptLevel(opt).create()
+    engine = llvm.EngineBuilder.new(lmod).setUseMCJIT(True).setOptLevel(opt).create()
     assert engine
     return engine
 

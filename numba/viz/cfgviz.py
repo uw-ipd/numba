@@ -33,7 +33,7 @@ def cf_from_source(source, func_globals):
 
     env.translation.push_env(func_env)
     try:
-        ast, symtab, cfflow = entrypoints.build_ssa(env, func_env.ast)
+        _, symtab, cfflow = entrypoints.build_ssa(env, func_env.ast)
     finally:
         env.translation.pop()
 
@@ -85,5 +85,12 @@ if __name__ == '__main__':
             y = x
             x = i # x_6
     """)
-
+    source = textwrap.dedent("""
+        def func():
+            a = 0
+            b = 0
+            c = 0
+            if a < b < c:
+                print a
+    """)
     render_cfg_from_source(source, os.path.expanduser("~/cfg.dot"))

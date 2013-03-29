@@ -23,6 +23,7 @@ from numba import optimize
 from numba import closures
 from numba import reporting
 from numba import normalize
+from numba import validate
 from numba.control_flow import ssa
 from numba.viz import astviz
 from numba.control_flow import entrypoints as cfentrypoints
@@ -312,6 +313,11 @@ def create_lfunc3(tree, env):
 def dump_ast(ast, env):
     astviz.render_ast(ast, os.path.expanduser("~/ast.dot"))
     return ast
+
+class ValidateASTStage(PipelineStage):
+    def transform(self, ast, env):
+        validate.ValidateAST().visit(ast)
+        return ast
 
 class NormalizeASTStage(PipelineStage):
     def transform(self, ast, env):

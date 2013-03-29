@@ -142,7 +142,10 @@ class ExpressionNode(ExprNode):
         super(ExpressionNode, self).__init__(**kwargs)
         self.stmts = stmts
         self.expr = expr
-        self.type = expr.variable.type
+
+    @property
+    def type(self):
+        return self.expr.variable.type
 
     def __repr__(self):
         return "exprstat(..., %s)" % self.expr

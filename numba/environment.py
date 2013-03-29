@@ -33,6 +33,7 @@ default_normalize_order = [
     'validate_signature',
     'update_signature',
     'create_lfunc1',
+    'ValidateASTStage',
     'NormalizeASTStage',
 ]
 

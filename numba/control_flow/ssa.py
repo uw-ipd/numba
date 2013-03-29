@@ -539,51 +539,44 @@ class PromotionMerger(visitors.NumbaTransformer):
 # Handle phis during code generation
 #------------------------------------------------------------------------
 
-# TODO: should will be explicit in the IR, remove
+def propagate_defs(block):
+    parent_defs = {}
+    for parent in block.parents:
+        parent_defs.update(parent.live_defs)
+    block.live_defs = dict(parent_defs, **block.live_defs)
 
-def process_incoming(phi_node):
+def propagate_promotions(block):
+    for parent in block.parents:
+        block.live_promotions.update(parent.live_promotions)
+
+def find_parent(block, phi_def):
+    for parent in block.parents:
+        incoming = parent.get(phi_def.name, None)
+        if incoming is phi_def or phi_def in parent.live_promotions:
+            return parent
+
+    assert False
+
+def preload_array_attrs(phi_def, incoming, parent_block):
+    if phi_def.type.is_array:
+        nodes.update_preloaded_phi(phi_def,
+                                   incoming,
+                                   parent_block.llvm_block)
+
+def update_ssa_graph(flow):
     """
     Add all incoming phis to the phi instruction.
-
-    Handle promotions by using the promoted value from the incoming block.
-    E.g.
-
-        bb0: if C:
-        bb1:     x = 2
-             else:
-        bb2:     x = 2.0
-
-        bb3: x = phi(x_bb1, x_bb2)
-
-    has a promotion for 'x' in basic block 1 (from int to float).
     """
-    var = phi_node.variable
-    phi = var.lvalue
+    # Forward propagate promotions and definitions
+    for block in flow.blocks:
+        propagate_defs(block)
+        propagate_promotions(block)
 
-    for parent_block, incoming_var in phi_node.find_incoming():
-        if incoming_var.type.is_uninitialized:
-            pass
-        elif not incoming_var.type == phi_node.type:
-            promotion = parent_block.symtab.lookup_promotion(var.name,
-                                                             phi_node.type)
-            incoming_var = promotion.variable
-
-        assert incoming_var.lvalue, incoming_var
-        assert parent_block.exit_block, parent_block
-
-        phi.add_incoming(incoming_var.lvalue,
-                         parent_block.exit_block)
-
-        if phi_node.type.is_array:
-            nodes.update_preloaded_phi(phi_node.variable,
-                                       incoming_var,
-                                       parent_block.exit_block)
-
-
-def handle_phis(flow):
-    """
-    Update all our phi nodes after translation is done and all Variables
-    have their llvm values set.
-    """
-    for phi_node in iter_phis(flow):
-        process_incoming(phi_node)
+    # Update LLVM SSA graph
+    for block in flow.blocks:
+        for phi_def in block.phi_defs:
+            phi = phi_def.lvalue
+            for incoming in phi_def.incoming:
+                parent_block = find_parent(block, incoming)
+                phi.add_incoming(incoming.lvalue, parent_block.llvm_block)
+                preload_array_attrs(phi_def, incoming, parent_block)

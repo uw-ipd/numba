@@ -143,10 +143,6 @@ class CFGFlow(Flow):
 
     def mark_position(self, node):
         """Mark position, will be used to draw graph nodes."""
-        if self.block:
-            src_descr = self.source_descr
-            pos = (src_descr,) + getpos(node)
-            self.block.positions.add(pos)
 
     def mark_assignment(self, lhs, rhs, entry, assignment, warn_unused=True):
         if self.block:

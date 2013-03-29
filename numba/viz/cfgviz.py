@@ -15,7 +15,6 @@ from numba import pipeline
 from numba import environment
 from numba.viz import graphviz
 from numba.control_flow import entrypoints
-from numba.control_flow.cfstats import NameAssignment
 
 
 # ______________________________________________________________________

@@ -36,9 +36,6 @@ def build_ssa(env, ast):
     messages = env.crnt.error_env.collection
     warner = cfwarnings.CFWarner(messages, env.crnt.cfdirectives)
 
-    # Graphviz
-    dotfile = env.crnt.cfdirectives['control_flow.dot_output']
-
     # Build CFG
     cfflow = flow.CFGFlow(env)
     ast, symtab = build_cfg(ast, cfflow, env)
@@ -53,5 +50,11 @@ def build_ssa(env, ast):
     ssa_maker.update_for_ssa(ast, symtab)
 
     ast = ssa.inject_phis(env, cfflow, ast)
+
+    # Graphviz
+    dotfile = env.crnt.cfdirectives['control_flow.dot_output']
+    if dotfile:
+        from numba.viz import cfgviz
+        cfgviz.render_cfg(cfflow, dotfile)
 
     return ast, symtab, cfflow

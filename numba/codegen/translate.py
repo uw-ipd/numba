@@ -256,8 +256,9 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
                                                              self.lfunc.name)
 
         self.entry = self.flow.entry_point.llvm_block
-
         self.builder = lc.Builder.new(self.entry)
+        self.flow.builder = self.builder
+
         self.caster = _LLVMCaster(self.builder)
         self.object_coercer = coerce.ObjectCoercer(self)
         self.multiarray_api.set_PyArray_API(self.llvm_module)
@@ -306,9 +307,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         Update all our phi nodes after translation is done and all Variables
         have their llvm values set.
         """
-        # Add all incoming values to all our phi values
-        # TODO: Redo this better
-        ssa.handle_phis(self.env.crnt.cfg)
+        ssa.update_ssa_graph(self.flow)
 
     @property
     def lfunc_pointer(self):
@@ -380,7 +379,6 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         if self.is_void_return:
             self.builder.ret_void()
         else:
-            ret_type = self.func_signature.return_type
             self.builder.ret(self.builder.load(self.return_value))
 
     def alloca(self, type, name='', change_bb=True):
@@ -420,6 +418,8 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         cleanup_block = self.flow.newblock(self.ast, "cleanup")
         error_block = self.flow.newblock(self.ast, "error")
 
+        self.current_cleanup_bb = cleanup_block.llvm_block
+
         # Jump here in case of an error
         self.error_label = error_block.llvm_block
         self.builder.position_at_end(self.error_label)
@@ -445,6 +445,8 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
 
         cleanup_block.add_child(error_block)
         self.flow.blocks.extend([cleanup_block, error_block])
+
+        codeblocks.lower_cfg(self.flow, self.builder)
 
     def visit_FunctionWrapperNode(self, node):
         # Disable debug coercion
@@ -589,6 +591,9 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
             self.visit(node.check_unbound)
 
     def visit_Name(self, node):
+        if isinstance(node.ctx, ast.Store):
+            self.add_def(node.variable)
+
         var = node.variable
         if (var.lvalue is None and not var.renameable and
                 self.symtab[node.id].is_cellvar):
@@ -606,6 +611,9 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         else:
             return var.lvalue
 
+    def add_def(self, variable):
+        self.flow.block.live_defs[variable.name] = variable
+
     #------------------------------------------------------------------------
     # Control Flow
     #------------------------------------------------------------------------
@@ -613,8 +621,11 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
     def visit_PromotionNode(self, node):
         lvalue = self.visit(node.node)
         node.variable.lvalue = lvalue
+        self.add_def(node.variable)
 
     def visit_PhiNode(self, phi_node):
+        self.flow.block.phi_defs.append(phi_node.variable)
+
         ltype = phi_node.variable.type.to_llvm(self.context)
         phi = self.builder.phi(ltype, phi_node.variable.unmangled_name)
         phi_node.variable.lvalue = phi

@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function, division, absolute_import
+
+import os
 import weakref
 import ast as ast_module
 import types
@@ -293,7 +295,7 @@ class FunctionEnvironment(object):
             'warn.unused': warn,
             'warn.unused_arg': warn,
             # Set the below flag to a path to generate CFG dot files
-            'control_flow.dot_output': '', # os.path.expanduser("~/cfg.dot"),
+            'control_flow.dot_output': os.path.expanduser("~/cfg.dot"),
             'control_flow.dot_annotate_defs': False,
         },
     )

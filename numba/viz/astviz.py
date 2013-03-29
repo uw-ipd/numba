@@ -69,9 +69,16 @@ def strval(val):
 class ASTGraphRenderer(object):
 
     def render(self, node):
-        args = ", ".join(
-            '%s=%s' % (attr, strval(child)) for attr, child in fields(node)
-                                                if not is_ast(child))
+        all_fields = fields(node)
+
+        for attr in getattr(node, '_attributes', []):
+            if attr not in node._fields and hasattr(node, attr):
+                all_fields.append((attr, getattr(node, attr)))
+
+        all_fields = [(attr, v) for attr, v in all_fields if not is_ast(v)]
+        args = ",\n".join('%s=%s' % (a, strval(v)) for a, v in all_fields)
+        if args:
+            args = '\n' + args
         return "%s(%s)" % (type(node).__name__, args)
 
     def render_edge(self, source, dest):

@@ -85,6 +85,8 @@ class PhiCollection(nodes.Node):
 
 class PhiNode(nodes.Node):
 
+    _attributes = ['name']
+
     def __init__(self, block, variable):
         self.block = block
         # Unrenamed variable. This will be replaced by the renamed version
@@ -101,6 +103,10 @@ class PhiNode(nodes.Node):
     @property
     def entry(self):
         return self.variable
+
+    @property
+    def name(self):
+        return self.variable.unmangled_name
 
     def add_incoming_block(self, block):
         self.incoming_blocks.append(block)

@@ -1,3 +1,4 @@
+import __builtin__
 import dis, inspect
 from io import BytesIO
 from collections import namedtuple, deque, defaultdict
@@ -35,9 +36,8 @@ def gen_instr(co_code):
 class Translator(object):
     def __init__(self, func):
         self.globals = func.func_globals
-        self.builtins = vars(self.globals['__builtins__'])
+        self.builtins = vars(__builtin__)
         self.code = get_code_object(func)
-        dis.disassemble(self.code)
         argspec = inspect.getargspec(func)
         self.argnames = argspec.args
         assert not argspec.varargs

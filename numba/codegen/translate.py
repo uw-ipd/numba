@@ -638,32 +638,8 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         raise error.NumbaError(node, "This node should have been replaced")
 
     def visit_IfExp(self, node):
-        test = self.visit(node.test)
-        if test.type != _int1:
-            test = self._generate_test(test)
-
-        then_block = self.append_basic_block('ifexp.then')
-        else_block = self.append_basic_block('ifexp.else')
-        merge_block = self.append_basic_block('ifexp.merge')
-
-        self.builder.cbranch(test, then_block, else_block)
-
-        self.builder.position_at_end(then_block)
-        then_value = self.visit(node.body)
-        self.builder.branch(merge_block)
-
-        self.builder.position_at_end(else_block)
-        else_value = self.visit(node.orelse)
-        self.builder.branch(merge_block)
-
-        self.builder.position_at_end(merge_block)
-        phi = self.builder.phi(then_value.type)
-        phi.add_incoming(then_value, then_block)
-        phi.add_incoming(else_value, else_block)
-        return phi
-
-    def append_basic_block(self, name='unamed'):
-        return self.lfunc.append_basic_block(name)
+        self.visit_If(node)
+        return self.builder.select(node.test, node.body[-1], node.orelse[-1])
 
     #------------------------------------------------------------------------
     # Control Flow: Return
@@ -733,56 +709,21 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
                                  lc.Constant.null(llval.type))
 
     def visit_BoolOp(self, node):
-        # NOTE: Can have >2 values
-        assert len(node.values) >= 2
-        assert isinstance(node.op, ast.And) or isinstance(node.op, ast.Or)
+        node = super(LLVMCodeGenerator, self).visit_BoolOp(node)
 
-        count = len(node.values)
+        # TODO: Simplify further
 
         if isinstance(node.op, ast.And):
-            bb_true = self.append_basic_block('and.true')
-            bb_false = self.append_basic_block('and.false')
-            bb_next = [self.append_basic_block('and.rhs')
-                       for i in range(count - 1)] + [bb_true]
-            bb_done = self.append_basic_block('and.done')
-
-            for i in range(count):
-                value = self.visit(node.values[i])
-                if value.type != _int1:
-                    value = self._generate_test(value)
-                self.builder.cbranch(value, bb_next[i], bb_false)
-                self.builder.position_at_end(bb_next[i])
-
-            assert self.builder.basic_block is bb_true
-            self.builder.branch(bb_done)
-
-            self.builder.position_at_end(bb_false)
-            self.builder.branch(bb_done)
-
-            self.builder.position_at_end(bb_done)
-        elif isinstance(node.op, ast.Or):
-            bb_true = self.append_basic_block('or.true')
-            bb_false = self.append_basic_block('or.false')
-            bb_next = [self.append_basic_block('or.rhs')
-                       for i in range(count - 1)] + [bb_false]
-            bb_done = self.append_basic_block('or.done')
-
-            for i in range(count):
-                value = self.visit(node.values[i])
-                if value.type != _int1:
-                    value = self._generate_test(value)
-                self.builder.cbranch(value, bb_true, bb_next[i])
-                self.builder.position_at_end(bb_next[i])
-
-            assert self.builder.basic_block is bb_false
-            self.builder.branch(bb_done)
-
-            self.builder.position_at_end(bb_true)
-            self.builder.branch(bb_done)
-
-            self.builder.position_at_end(bb_done)
+            # AND: if false, short-circuit
+            bb_true, bb_false = node.rhs_block, node.exit_block
         else:
-            raise Exception("internal erorr")
+            # OR: if true, short-circuit
+            bb_true, bb_false = node.exit_block, node.rhs_block
+
+        self.builder.position_at_end(node.lhs_block.llvm_block)
+        self.builder.cbranch(node.value[0],
+                             [bb_true.llvm_block, bb_false.llvm_block])
+        self.builder.position_at_end(node.exit_block.llvm_block)
 
         booltype = _int1
         phi = self.builder.phi(booltype)
@@ -801,20 +742,11 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         op = node.op
         if isinstance(op, ast.Not) and (operand_type.is_bool or
                                         operand_type.is_int_like):
-            bb_false = self.builder.basic_block
-            bb_true = self.append_basic_block('not.true')
-            bb_done = self.append_basic_block('not.done')
-            self.builder.cbranch(
-                self.builder.icmp(lc.ICMP_NE, operand,
-                                  lc.Constant.null(operand_ltype)),
-                bb_true, bb_done)
-            self.builder.position_at_end(bb_true)
-            self.builder.branch(bb_done)
-            self.builder.position_at_end(bb_done)
-            phi = self.builder.phi(operand_ltype)
-            phi.add_incoming(lc.Constant.int(operand_ltype, 1), bb_false)
-            phi.add_incoming(lc.Constant.int(operand_ltype, 0), bb_true)
-            return phi
+            is_false = self.builder.icmp(lc.ICMP_NE, operand,
+                                         lc.Constant.null(operand_ltype))
+            return self.builder.select(is_false,
+                                       lc.Constant.int(operand_ltype, 1),
+                                       lc.Constant.int(operand_ltype, 0))
         elif isinstance(op, ast.USub) and operand_type.is_numeric:
             if operand_type.is_float:
                 return self.builder.fsub(lc.Constant.null(operand_ltype),

@@ -103,6 +103,9 @@ class ControlFlowExpander(visitors.NumbaTransformer):
 
         return node
 
+    def visit_IfExp(self, node):
+        return self.visit_If(node)
+
     def handle_body(self, node, exit_block):
         # If Body, child of condition block
         node.if_block = self.flow.nextblock(node.body[0], 'body')
@@ -234,4 +237,19 @@ class ControlFlowExpander(visitors.NumbaTransformer):
             self.flow.block.add_child(loop.loop_block)
 
         self.flow.block = None
+        return node
+
+    def visit_BoolOp(self, node):
+        assert len(node.values) == 2
+
+        with self.flow.float(node, 'exit_boolop') as node.exit_block:
+            node.lhs_block = self.flow.nextblock(node.value[0], 'lhs_op')
+            node.value[0] = self.visit(node.value[0])
+
+            node.rhs_block = self.flow.nextblock(node.values[1], 'rhs_op')
+            node.value[1] = self.visit(node.value[1])
+
+            node.lhs_block.add_child(node.exit_block)
+            node.rhs_block.add_child(node.exit_block)
+
         return node

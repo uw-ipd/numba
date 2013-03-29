@@ -311,6 +311,7 @@ def create_lfunc3(tree, env):
 
 def dump_ast(ast, env):
     astviz.render_ast(ast, os.path.expanduser("~/ast.dot"))
+    return ast
 
 class NormalizeASTStage(PipelineStage):
     def transform(self, ast, env):
@@ -331,7 +332,7 @@ class ControlFlowAnalysis(PipelineStage):
         return True
 
     def transform(self, ast, env):
-        symtab, cfg = cfentrypoints.build_ssa(env, ast)
+        ast, symtab, cfg = cfentrypoints.build_ssa(env, ast)
         env.crnt.symtab = symtab
         env.crnt.cfg = cfg
         return ast

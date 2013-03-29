@@ -52,4 +52,6 @@ def build_ssa(env, ast):
     ssa_maker.compute_dominance_frontier()
     ssa_maker.update_for_ssa(ast, symtab)
 
-    return symtab, cfflow
+    ast = ssa.inject_phis(env, cfflow, ast)
+
+    return ast, symtab, cfflow

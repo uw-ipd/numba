@@ -45,14 +45,12 @@ class While(ast.While):
     _fields = (
         'test',
         'body',
-        'incr', # Set to [stmt] if this was a for loop rewritten to a while
         'orelse',
     )
 
-    def __init__(self, test, body, incr, orelse):
+    def __init__(self, test, body, orelse):
         self.test = test
         self.body = body
-        self.incr = incr
         self.orelse = orelse
 
 

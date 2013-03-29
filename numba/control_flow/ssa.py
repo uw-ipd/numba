@@ -301,6 +301,11 @@ def kill_unused_phis(cfg):
 # Merge Phis into AST (CFA stage)
 #------------------------------------------------------------------------
 
+def inject_phis(env, cfg, ast):
+    "Inject phis as PhiNode nodes into the AST"
+    injector = PhiInjector(env.context, None, ast, env, cfg)
+    return injector.visit(ast)
+
 def phi_nodes(basic_block):
     return basic_block.phis.values()
 
@@ -317,10 +322,7 @@ def merge_inplace(basic_block, body_list):
     statements.
     """
     nodes = body_list[:]
-    body_list.clear()
-    body_list.extend(phi_nodes(basic_block))
-    body_list.extend(nodes)
-
+    body_list[:] = phi_nodes(basic_block) + nodes
 
 class PhiInjector(visitors.NumbaTransformer):
     """
@@ -328,10 +330,14 @@ class PhiInjector(visitors.NumbaTransformer):
     phis computed.
     """
 
+    def __init__(self, context, func, ast, env, cfg, **kwargs):
+        super(PhiInjector, self).__init__(context, func, ast, env, **kwargs)
+        self.cfg = cfg
+
     def visit_FunctionDef(self, node):
         self.visitchildren(node)
         merge_inplace(node.body_block, node.body)
-        node.body.extend(phi_nodes(self.env.crnt.flow.exit_point))
+        node.body.extend(phi_nodes(self.cfg.exit_point))
         return node
 
     def handle_if_or_while(self, node, body_block):
@@ -357,20 +363,11 @@ class PhiInjector(visitors.NumbaTransformer):
     def visit_For(self, node):
         self.visitchildren(node)
 
-        # condition
         preceding = phi_nodes(node.cond_block)
-
-        # body
         merge_inplace(node.for_block, node.body)
-
-        # incr
-        incr = phi_nodes(node.incr_block)
-
-        # exit block
         postceding = phi_nodes(node.exit_block)
 
-        for_node = cfnodes.For(node.target, node.iter, node.body,
-                               incr, node.orelse)
+        for_node = cfnodes.For(node.target, node.iter, node.body, node.orelse)
         return ast.Suite(preceding + [for_node] + postceding)
 
 

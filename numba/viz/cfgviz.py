@@ -33,7 +33,7 @@ def cf_from_source(source, func_globals):
 
     env.translation.push_env(func_env)
     try:
-        symtab, cfflow = entrypoints.build_ssa(env, func_env.ast)
+        ast, symtab, cfflow = entrypoints.build_ssa(env, func_env.ast)
     finally:
         env.translation.pop()
 

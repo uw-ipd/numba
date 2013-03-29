@@ -39,6 +39,7 @@ default_normalize_order = [
 default_pipeline_order = default_normalize_order + [
     'ControlFlowAnalysis',
     #'ConstFolding',
+    'dump_ast',
     'TypeInfer',
     'update_signature',
     'create_lfunc2',

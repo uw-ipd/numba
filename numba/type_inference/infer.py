@@ -242,7 +242,7 @@ class TypeInferer(visitors.NumbaTransformer):
         else:
             node.variable.type = incoming_types[0]
 
-        #print "handled", node.variable
+        # print("handled", node.variable)
         return node
 
     def analyse_assignments(self):
@@ -250,7 +250,6 @@ class TypeInferer(visitors.NumbaTransformer):
         Analyze all variable assignments and phis.
         """
         cfg = self.env.crnt.cfg
-        ssa.kill_unused_phis(cfg)
 
         self.analyse = False
         self.function_level += 1
@@ -465,6 +464,9 @@ class TypeInferer(visitors.NumbaTransformer):
 
     def visit_PhiNode(self, node):
         # Already handled
+        types = [var.type for var in node.incoming
+                              if not var.type.is_uninitialized]
+        node.variable.type = reduce(self.context.promote_types, types)
         return node
 
     #------------------------------------------------------------------------

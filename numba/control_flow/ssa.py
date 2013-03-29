@@ -409,7 +409,7 @@ def specialize_ssa(env, ast):
 
     # variable_def -> dst_type -> [PromotionNode]
     # Remember that multiple phis may reference a single other phi
-    promotions = defaultdict(partial(defaultdict, list))
+    promotions = defaultdict(dict)
 
     for phi_node in iter_phis(env.crnt.cfg):
         initialize_uninitialized(phi_node, badvals)
@@ -528,8 +528,8 @@ class PromotionMerger(visitors.NumbaTransformer):
 
     def visit_PhiNode(self, node):
         for incoming_def in node.incoming:
-            if incoming_def in self.promotions:
-                promotion = self.promotions[incoming_def]
+            if node.type in self.promotions[incoming_def]:
+                promotion = self.promotions[incoming_def][node.type]
                 node.incoming.remove(incoming_def)
                 node.incoming.add(promotion.variable)
 

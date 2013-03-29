@@ -153,7 +153,8 @@ class TestForLoop(unittest.TestCase):
 
 if __name__ == "__main__":
     compiled_for_loop_fn = jit(argtypes = [i4, i4, i4],
-                               restype = i4, backend='ast', nopython=True)(for_loop_fn_1)
+                               restype = i4, backend='ast',
+                               nopython=True)(for_loop_fn_1)
     unittest.main()
 
 # ______________________________________________________________________

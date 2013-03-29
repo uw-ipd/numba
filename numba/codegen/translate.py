@@ -440,8 +440,8 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         else:
             self.visit(self.ast)
 
-        if self.block:
-            self.block.add_child(cleanup_block)
+        if self.flow.block:
+            self.flow.block.add_child(cleanup_block)
 
         cleanup_block.add_child(error_block)
         self.flow.blocks.extend([cleanup_block, error_block])
@@ -483,6 +483,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         if (isinstance(target_node, ast.Name) and
                 self.renameable(target_node.variable)):
             # phi nodes are in place for the variable
+            # print("processing def:", target_node.variable)
             target_node.variable.lvalue = value
             if not is_object:
                 # No worries about refcounting, we are done

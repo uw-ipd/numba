@@ -14,10 +14,20 @@ from itertools import chain, imap, ifilter
 from numba.viz.graphviz import render
 
 # ______________________________________________________________________
+# AST Constants
+
+ast_constant_classes = (
+    ast.expr_context,
+    ast.operator,
+    ast.unaryop,
+    ast.cmpop,
+)
+
+# ______________________________________________________________________
 # Utilities
 
 is_ast = lambda node: (isinstance(node, (ast.AST, list)) and not
-                       isinstance(node, ast.expr_context))
+                       isinstance(node, ast_constant_classes))
 
 class NonASTConstant(object):
     def __init__(self, value):
@@ -51,10 +61,10 @@ class ASTGraphAdaptor(object):
 # Renderer
 
 def strval(val):
-    if isinstance(val, ast.expr_context):
+    if isinstance(val, ast_constant_classes):
         return type(val).__name__ # Load, Store, Param
     else:
-        return str(val)
+        return repr(val)
 
 class ASTGraphRenderer(object):
 

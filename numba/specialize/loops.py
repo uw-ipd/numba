@@ -34,16 +34,6 @@ def unpack_range_args(node):
 
     return [start, stop, step]
 
-
-def make_while_from_for(for_node):
-    "Create a While from a For. The 'test' (loop condition) must still be set."
-    while_node = nodes.While(test=None,
-                             body=for_node.body,
-                             incr=for_node.incr,
-                             orelse=for_node.orelse)
-    return while_node
-
-
 #------------------------------------------------------------------------
 # Transform for loops
 #------------------------------------------------------------------------
@@ -106,8 +96,8 @@ class TransformForIterable(visitors.NumbaTransformer):
                 {{temp}} = 0
                 while {{temp_load}} < {{nsteps_load}}:
                     {{target}} = {{start}} + {{temp_load}} * {{step}}
-                    {{body}}
                     {{temp}} = {{temp_load}} + 1
+                    {{body}}
                 %s
             """) % (textwrap.dedent(compute_nsteps), else_clause)
 
@@ -135,15 +125,12 @@ class TransformForIterable(visitors.NumbaTransformer):
         else_body.body.extend(node.orelse)
 
         #--------------------------------------------------------------------
-        # Create nodes.While with increment body (for 'continue')
+        # Create nodes.While
         #--------------------------------------------------------------------
 
         while_node = result.body[-1]
-        assert isinstance(while_node, ast.While)
-        incr_stat = while_node.body.pop()
-        assert isinstance(incr_stat, ast.Assign)
         while_node = nodes.While(while_node.test, while_node.body,
-                                 [incr_stat], while_node.orelse)
+                                 while_node.orelse)
 
         result.body[-1] = while_node
 
@@ -171,7 +158,6 @@ class TransformForIterable(visitors.NumbaTransformer):
         # Replace node.target with a temporary
         #--------------------------------------------------------------------
 
-        target_name = orig_target.id + '.idx'
         target_temp = nodes.TempNode(Py_ssize_t)
         node.target = target_temp.store()
 
@@ -245,7 +231,7 @@ class SpecializeObjectIteration(visitors.NumbaTransformer):
     """
 
     def visit_For(self, node):
-        while_node = make_while_from_for(node)
+        while_node = nodes.While(None, node.body, node.orelse)
 
         test = nodes.const(True, bool_)
         while_node.test = test
@@ -264,7 +250,5 @@ class SpecializeObjectIteration(visitors.NumbaTransformer):
         # Update While node body
         body.insert(0, target_assmnt)
         while_node.body = body
-
-        nodes.merge_cfg_in_while(while_node)
 
         return ast.Suite(body=[iter, while_node])

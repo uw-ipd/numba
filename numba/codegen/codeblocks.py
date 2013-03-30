@@ -64,19 +64,24 @@ def is_terminated(block):
     instructions = block.llvm_block.instructions
     return instructions and instructions[-1].is_terminator
 
-def lower_cfg(flow, builder):
+def lower_cfg(flow, builder, lfunc):
     """
     Connect LLVM basic blocks.
     """
     from numba.viz import cfgviz
     cfgviz.render_cfg(flow, os.path.expanduser("~/cfg.dot"))
 
-    for block in flow.blocks[2:]:
+    flow.blocks.insert(0, flow.entry_point)
+    flow.blocks.append(flow.exit_point)
+
+    for block in flow.blocks:
         print(block, block.children, is_terminated(block))
         if len(block.children) == 1 and not is_terminated(block):
             builder.position_at_end(block.llvm_block)
             childblock, = block.children
             builder.branch(childblock.llvm_block)
 
-    for block in flow.blocks[2:]:
+    print(lfunc)
+
+    for block in flow.blocks:
         assert is_terminated(block), (block, block.children)

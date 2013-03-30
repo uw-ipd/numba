@@ -281,6 +281,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
             self.visit_ast()
             self.handle_phis()
             self.terminate_cleanup_blocks()
+            codeblocks.lower_cfg(self.flow, self.builder, self.lfunc)
 
             # Done code generation
             del self.builder  # release the builder to make GC happy
@@ -376,6 +377,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         for name, stackspace in self.object_local_temps.iteritems():
             self.xdecref_temp(stackspace)
 
+        self.builder.position_at_end(self.flow.exit_point.llvm_block)
         if self.is_void_return:
             self.builder.ret_void()
         else:
@@ -444,9 +446,9 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
             self.flow.block.add_child(cleanup_block)
 
         cleanup_block.add_child(error_block)
-        self.flow.blocks.extend([cleanup_block, error_block])
+        error_block.add_child(self.flow.exit_point)
 
-        codeblocks.lower_cfg(self.flow, self.builder)
+        self.flow.blocks.extend([cleanup_block, error_block])
 
     def visit_FunctionWrapperNode(self, node):
         # Disable debug coercion
@@ -639,6 +641,13 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
 
     def visit_If(self, node):
         node = super(LLVMCodeGenerator, self).visit_If(node)
+        self.handle_if_or_while(node)
+
+    def visit_While(self, node):
+        node = super(LLVMCodeGenerator, self).visit_While(node)
+        self.handle_if_or_while(node)
+
+    def handle_if_or_while(self, node):
         bb_cond = node.cond_block.llvm_block
         self.builder.position_at_end(bb_cond)
         self.builder.cbranch(

@@ -71,4 +71,4 @@ class BasicBlock(object):
         flow.blocks.remove(self)
 
     def __repr__(self):
-        return 'Block(%d)' % self.id
+        return 'Block(%d, %s)' % (self.id, self.label)

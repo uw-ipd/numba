@@ -12,11 +12,7 @@ Used to:
 
 from __future__ import print_function, division, absolute_import
 
-import ast
-
 from numba import visitors
-from numba import symtab
-from numba import nodes
 from numba.control_flow.cfstats import *
 
 

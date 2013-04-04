@@ -2,7 +2,8 @@
 from __future__ import print_function, division, absolute_import
 
 from numba.exttypes.entrypoints import  (jit_extension_class,
-                                         autojit_extension_class)
+                                         autojit_extension_class,
+                                         autojit_class_wrapper)
 
 __all__ = ['autojit', 'jit', 'export', 'exportmany']
 
@@ -23,6 +24,11 @@ from numba.wrapping import compiler
 logger = logging.getLogger(__name__)
 
 environment.NumbaEnvironment.get_environment().link_cbuilder_utilities()
+
+if PY3:
+    CLASS_TYPES = type
+else:
+    CLASS_TYPES = (type, types.ClassType)
 
 #------------------------------------------------------------------------
 # PyCC decorators
@@ -145,16 +151,17 @@ def _autojit(template_signature, target, nopython, env_name=None, env=None,
         use @autojit.
         """
 
-        if isinstance(f, (type, types.ClassType)):
+        if isinstance(f, CLASS_TYPES):
             compiler_cls = compiler.ClassCompiler
+            wrapper = autojit_class_wrapper
         else:
             compiler_cls = compiler.FunctionCompiler
+            wrapper = autojit_wrappers[(target, 'ast')]
 
         env.specializations.register(f)
         cache = env.specializations.get_autojit_cache(f)
 
         compilerimpl = compiler_cls(env, f, nopython, flags, template_signature)
-        wrapper = autojit_wrappers[(target, 'ast')]
         numba_func = wrapper(f, compilerimpl, cache)
 
         return numba_func
@@ -189,7 +196,7 @@ def _jit(restype=None, argtypes=None, nopython=False,
     if env is None:
         env = environment.NumbaEnvironment.get_environment(env_name)
     def _jit_decorator(func):
-        if isinstance(func, (type, types.ClassType)):
+        if isinstance(func, CLASS_TYPES):
             cls = func
             kwargs.update(env_name=env_name)
             return jit_extension_class(cls, kwargs, env)
@@ -248,7 +255,7 @@ def jit(restype=None, argtypes=None, backend='ast', target='cpu', nopython=False
     deprecated as of the 0.3 release.*
     """
     kws.update(nopython=nopython, backend=backend)
-    if isinstance(restype, (type, types.ClassType)):
+    if isinstance(restype, CLASS_TYPES):
         cls = restype
         env = kws.pop('env', None) or environment.NumbaEnvironment.get_environment(
                                                          kws.get('env_name', None))

@@ -40,6 +40,12 @@ cdef PyCustomSlots_Table *allocate_hash_table(uint16_t size) except NULL:
 
     return table
 
+def make_bytes(s):
+    if isinstance(s, str):
+        # Python 3
+        s = s.encode("ascii")
+
+    return s
 
 cdef class Hasher(object):
     """
@@ -50,8 +56,8 @@ cdef class Hasher(object):
         cdef uint64_t hashvalue
         # cdef bytes md5 = hashlib.md5(signature).digest()
         # (&hashvalue)[0] = (<uint64_t *> <char *> md5)[0]
-        hashvalue = intern.global_intern(signature)
 
+        hashvalue = intern.global_intern(make_bytes(signature))
         return hashvalue
 
 
@@ -64,10 +70,14 @@ cdef class PerfectHashMethodTable(object):
     cdef uint16_t *displacements
     cdef Hasher hasher
 
+    cdef object id_to_signature, signatures
+
     def __init__(self, hasher):
         self.hasher = hasher
+        # For debugging
+        self.id_to_signature = {}
 
-    def generate_table(self, n, ids, flags, funcs):
+    def generate_table(self, n, ids, flags, funcs, method_names=None):
         cdef Py_ssize_t i
         cdef cnp.ndarray[uint64_t] hashes
 
@@ -81,10 +91,13 @@ cdef class PerfectHashMethodTable(object):
 
         # Initialize hash table entries, build hash ids
         for i, (signature, flag, func) in enumerate(zip(ids, flags, funcs)):
-            self.table.entries[i].id = self.hasher.hash_signature(signature)
+            id = self.hasher.hash_signature(signature)
+
+            self.table.entries[i].id = id
             self.table.entries[i].ptr = <void *> <uintptr_t> func
 
-            hashes[i] = self.hasher.hash_signature(signature)
+            hashes[i] = id
+            self.id_to_signature[id] = signature
 
         hashes[n:self.table.n] = extensibletype.draw_hashes(np.random,
                                                             self.table.n - n)
@@ -95,12 +108,15 @@ cdef class PerfectHashMethodTable(object):
         for signature in ids:
             assert self.find_method(signature)
 
+        # For debugging
+        self.signatures = ids
+
     def find_method(self, signature):
         """
         Find method of the given signature. Use from non-performance
         critical code.
         """
-        cdef uint64_t prehash = intern.global_intern(signature)
+        cdef uint64_t prehash = intern.global_intern(make_bytes(signature))
 
         cdef int idx = (((prehash >> self.table.r) & self.table.m_f) ^
                         self.displacements[prehash & self.table.m_g])
@@ -112,6 +128,19 @@ cdef class PerfectHashMethodTable(object):
 
         return (<uintptr_t> self.table.entries[idx].ptr,
                 self.table.entries[idx].id & 0xFF)
+
+    def __str__(self):
+        buf = ["PerfectHashMethodTable("]
+        for i in range(self.table.n):
+            id = self.table.entries[i].id
+            ptr = <uintptr_t> self.table.entries[i].ptr
+            sig = self.id_to_signature.get(id, "<empty>")
+            s = "    id: %20d  funcptr: %20d  signature: %s" % (id, ptr, sig)
+            buf.append(s)
+
+        buf.append(")")
+
+        return "\n".join(buf)
 
     def __dealloc__(self):
         # stdlib.free(self.table)

@@ -5,7 +5,12 @@
 #------------------------------------------------------------------------
 
 def is_numba_class(py_class):
-    return hasattr(py_class, '__numba_ext_type')
+    return (hasattr(py_class, '__numba_ext_type') or
+            is_autojit_class(py_class))
+
+def is_autojit_class(py_class):
+    "Returns whether the given class is an unspecialized autojit class"
+    return hasattr(py_class, "__is_numba_autojit")
 
 def get_all_numba_bases(py_class):
     seen = set()
@@ -20,3 +25,6 @@ def get_all_numba_bases(py_class):
 
 def get_numba_bases(py_class):
     return list(filter(is_numba_class, py_class.__bases__))
+
+def get_class_dict(unspecialized_autojit_py_class):
+    return unspecialized_autojit_py_class.__numba_class_dict

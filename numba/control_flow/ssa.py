@@ -2,7 +2,7 @@
 from __future__ import print_function, division, absolute_import
 
 import ast
-from functools import partial
+
 from collections import defaultdict
 from itertools import imap, chain
 

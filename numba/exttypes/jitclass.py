@@ -97,14 +97,15 @@ def create_extension(env, py_class, flags):
     ext_type = etypes.JitExtensionType(py_class)
 
     extension_compiler = JitExtensionCompiler(
-        env, py_class, ext_type, flags,
-        signatures.JitMethodMaker(ext_type),
+        env, py_class, dict(vars(py_class)), ext_type, flags,
+        signatures.JitMethodMaker(),
         compileclass.AttributesInheriter(),
         compileclass.Filterer(),
         JitAttributeBuilder(),
         virtual.StaticVTabBuilder(),
         compileclass.MethodWrapperBuilder())
 
+    extension_compiler.init()
     extension_compiler.infer()
     extension_compiler.finalize_tables()
     extension_compiler.validate()

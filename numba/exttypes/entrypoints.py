@@ -1,6 +1,9 @@
 import numba
+from numba import error
+from numba.exttypes import utils
 from numba.exttypes import jitclass
 from numba.exttypes import autojitclass
+from numba.exttypes.autojitclass import autojit_class_wrapper
 
 from llvm import core as _lc
 
@@ -26,4 +29,3 @@ def autojit_extension_class(env, py_class, flags, argtypes):
     class that contains the functions that are to be compiled.
     """
     return autojitclass.create_extension(env, py_class, flags, argtypes)
-

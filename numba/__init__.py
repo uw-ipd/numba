@@ -86,5 +86,5 @@ __all__ = typesystem.__all__ + decorators.__all__ + special.__all__
 __all__.extend(["numeric", "floating", "complextypes"])
 
 from numba import testing
-from numba.testing import test, nose_run
+from numba.testing import test
 from numba.testing.user_support import testmod

@@ -3,11 +3,12 @@ from __future__ import print_function, division, absolute_import
 
 import os
 import sys
+import unittest
 from itertools import ifilter, imap
 from functools import partial
 import subprocess
 
-from os.path import join, dirname
+from numba.testing import test_support as support
 
 from numba import PY3
 
@@ -130,11 +131,8 @@ def test(whitelist=None, blacklist=None, print_failures_only=False):
         filters.append(ModuleFilter(lambda item: not match(blacklist, item)))
 
     # Run tests
-    runner = TestRunner(print_failures_only)
+    runner = ProcessTestRunner(print_failures_only)
     run_tests(runner, filters)
-
-    sys.stdout.write("ran test files: failed: (%d/%d)\n" % (runner.failed,
-                                                            runner.ran))
 
     return 0 if runner.failed == 0 else 1
 
@@ -156,12 +154,13 @@ def run_tests(test_runner, filters):
                     for testfile in testfiles:
                         # print("testfile:", testfile)
                         modname = qualify_test_name(testfile)
-                        test_runner.run(modname)
+                        test_runner.collect(modname)
 
+    test_runner.run()
 
-class TestRunner(object):
+class ProcessTestRunner(object):
     """
-    Test runner used by runtests.py
+    Test runner used by runtests.py. Run all tests in subprocesses.
     """
 
     def __init__(self, print_failures_only):
@@ -169,7 +168,7 @@ class TestRunner(object):
         self.failed = 0
         self.print_failures_only = print_failures_only
 
-    def run(self, modname):
+    def collect(self, modname):
         self.ran += 1
         if not self.print_failures_only:
             sys.stdout.write("running %-61s" % (modname,))
@@ -197,15 +196,38 @@ class TestRunner(object):
             sys.stdout.write('\n')
             self.failed += 1
 
-# ______________________________________________________________________
-# Nose test running
+    def run(self):
+        sys.stdout.write("ran test files: failed: (%d/%d)\n" % (self.failed,
+                                                                self.ran))
 
-def nose_run(module=None):
-    import nose.config
-    import __main__
+class UnitTestRunner(object):
+    """
+    Test runner used by runtests.py. Run all tests as a single unittest suite.
+    """
 
-    #os.environ["NOSE_EXCLUDE"] = "(test_all|test_all_noskip|.*compile_with_pycc.*|bytecode)"
-    #os.environ["NOSE_VERBOSE"] = "4"
+    def __init__(self):
+        self.ran = 0
+        self.failed = 0
+        # self.loader = unittest.TestLoader()
+        self.suite = unittest.TestSuite()
 
-    result = nose.main()
-    return len(result.errors), len(result.failures)
+    def collect(self, modname):
+        module = __import__(modname, fromlist=[''])
+        support.make_unit_tests(vars(module))
+
+        classes = (unittest.TestCase, unittest.FunctionTestCase)
+        for name, obj in vars(module).iteritems():
+            if isinstance(obj, classes):
+                self.suite.addTest(obj)
+            elif isinstance(obj, type) and issubclass(obj, classes):
+                tests = unittest.defaultTestLoader.loadTestsFromTestCase(obj)
+                self.suite.addTests(tests)
+
+    def run(self):
+        runner = unittest.TextTestRunner()
+        runner.run(self.suite)
+        result = runner._makeResult()
+
+        self.ran += result.testsRun
+        self.failed += len(result.failures)
+

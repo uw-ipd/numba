@@ -95,6 +95,26 @@ def checkSkipFlag(reason):
 # Test running
 #------------------------------------------------------------------------
 
+def make_unit_tests(global_scope):
+    """
+    Put FunctionTestCases in the global scope
+    """
+    module_name = global_scope['__name__']
+
+    class NumbaTestCollection(unittest.TestCase):
+        pass
+
+    global_scope["NumbaTestCollection"] = NumbaTestCollection
+
+    for name, obj in global_scope.items():
+        if inspect.isfunction(obj) and obj.__module__ == module_name:
+            @functools.wraps(obj)
+            def wrapper(self, func=obj):
+                return func()
+
+            setattr(NumbaTestCollection, name, wrapper)
+
+
 def main():
     import sys, logging
     if '-d' in sys.argv:

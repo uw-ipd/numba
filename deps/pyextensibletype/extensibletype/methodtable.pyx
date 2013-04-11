@@ -19,24 +19,31 @@ def roundup(x):
     x += 1
     return x
 
+class HashingError(Exception):
+    """
+    Raised when we can't create a perfect hash-based function table.
+    """
+
 cdef PyCustomSlots_Table *allocate_hash_table(uint16_t size) except NULL:
     cdef PyCustomSlots_Table *table
+    cdef int nbins
 
     size = roundup(size)
+    nbins = size
 
     table = <PyCustomSlots_Table *> stdlib.calloc(
-        1, sizeof(PyCustomSlots_Table) + sizeof(uint16_t) * size +
+        1, sizeof(PyCustomSlots_Table) + sizeof(uint16_t) * nbins +
            sizeof(PyCustomSlots_Entry) * size)
 
     if table == NULL:
         raise MemoryError
 
     table.n = size
-    table.b = size
+    table.b = nbins
     table.flags = 0
 
     table.entries = <PyCustomSlots_Entry *> ((<char *> &table[1]) +
-                                             size * sizeof(uint16_t))
+                                             table.b * sizeof(uint16_t))
 
     return table
 
@@ -85,11 +92,13 @@ cdef class PerfectHashMethodTable(object):
         self.displacements = <uint16_t *> (<char *> self.table +
                                                sizeof(PyCustomSlots_Table))
 
-        hashes = np.empty(self.table.n, dtype=np.uint64)
+        hashes = np.zeros(self.table.n, dtype=np.uint64)
 
         intern.global_intern_initialize()
 
         # Initialize hash table entries, build hash ids
+        assert len(ids) == len(flags) == len(funcs)
+
         for i, (signature, flag, func) in enumerate(zip(ids, flags, funcs)):
             id = self.hasher.hash_signature(signature)
 
@@ -101,12 +110,19 @@ cdef class PerfectHashMethodTable(object):
 
         hashes[n:self.table.n] = extensibletype.draw_hashes(np.random,
                                                             self.table.n - n)
+        assert len(np.unique(hashes)) == len(hashes)
+
+        # print "-----------------------"
+        # print self
+        # print "-----------------------"
 
         # Perfect hash our table
-        PyCustomSlots_PerfectHash(self.table, &hashes[0])
+        if PyCustomSlots_PerfectHash(self.table, &hashes[0]) < 0:
+            # TODO: sensible error messages
+            raise HashingError("Unable to create perfect hash table")
 
-        for signature in ids:
-            assert self.find_method(signature)
+        for i, signature in enumerate(ids):
+            assert self.find_method(signature), (i, signature)
 
         # For debugging
         self.signatures = ids
@@ -118,12 +134,12 @@ cdef class PerfectHashMethodTable(object):
         """
         cdef uint64_t prehash = intern.global_intern(make_bytes(signature))
 
-        cdef int idx = (((prehash >> self.table.r) & self.table.m_f) ^
-                        self.displacements[prehash & self.table.m_g])
+        cdef uint64_t idx = (((prehash >> self.table.r) & self.table.m_f) ^
+                             self.displacements[prehash & self.table.m_g])
 
         assert 0 <= idx < self.size
 
-        if <uintptr_t> self.table.entries[idx].id != prehash:
+        if self.table.entries[idx].id != prehash:
             return None
 
         return (<uintptr_t> self.table.entries[idx].ptr,
@@ -135,7 +151,7 @@ cdef class PerfectHashMethodTable(object):
             id = self.table.entries[i].id
             ptr = <uintptr_t> self.table.entries[i].ptr
             sig = self.id_to_signature.get(id, "<empty>")
-            s = "    id: %20d  funcptr: %20d  signature: %s" % (id, ptr, sig)
+            s = "    id: 0x%-16x  funcptr: %20d  signature: %s" % (id, ptr, sig)
             buf.append(s)
 
         buf.append(")")

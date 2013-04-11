@@ -9,7 +9,6 @@ import llvm.core
 
 from numba.llvm_types import _int1, _int32, _LLVMCaster
 from numba.multiarray_api import MultiarrayAPI # not used
-from numba.symtab import Variable
 from numba import typesystem
 
 from numba import *
@@ -25,9 +24,8 @@ from numba.minivect import minitypes, llvm_codegen
 from numba import ndarray_helpers, error
 from numba.typesystem import is_obj
 from numba.utils import dump
-from numba import naming, metadata
+from numba import metadata
 from numba.codegen import codeblocks
-from numba.functions import keep_alive
 from numba.control_flow import ssa
 from numba.control_flow import expanding
 from numba.support.numpy_support import sliceutils
@@ -178,7 +176,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
             variable = self.symtab.get(argname, None)
 
             if self.renameable(variable):
-                if argtype.is_struct:
+                if argtype.is_struct or argtype.is_reference:
                     larg = self._allocate_arg_local(argname, argtype, larg)
 
                 # Set value on first definition of the variable

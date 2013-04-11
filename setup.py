@@ -2,6 +2,7 @@
 from __future__ import print_function, division, absolute_import
 import os
 import sys
+import shutil
 import subprocess
 from fnmatch import fnmatchcase
 from distutils.util import convert_path
@@ -24,11 +25,14 @@ if sys.version_info[:2] < (2, 6):
 
 import versioneer
 
+#------------------------------------------------------------------------
+# Setup constants and arguments
+#------------------------------------------------------------------------
+
 versioneer.versionfile_source = 'numba/_version.py'
 versioneer.versionfile_build = 'numba/_version.py'
 versioneer.tag_prefix = ''
 versioneer.parentdir_prefix = 'numba-'
-
 
 cmdclass = versioneer.get_cmdclass()
 cmdclass['build_ext'] = build_ext
@@ -37,6 +41,23 @@ setup_args = {
     'long_description': open('README.md').read(),
 }
 
+
+numba_root = os.path.dirname(os.path.abspath(__file__))
+deps_root = os.path.join(numba_root, 'deps')
+pyext_root = os.path.join(deps_root, 'pyextensibletype')
+pyext_dst = os.path.join(numba_root, "numba", "pyextensibletype")
+
+def get_include():
+    """Use numba.get_include() instead (make numba importable without
+    building it first)
+    """
+    return os.path.join(numba_root, "numba", "include")
+
+numba_include_dir = get_include()
+
+#------------------------------------------------------------------------
+# Package finding
+#------------------------------------------------------------------------
 
 def find_packages(where='.', exclude=()):
     out = []
@@ -58,6 +79,9 @@ def find_packages(where='.', exclude=()):
         out = [item for item in out if not fnmatchcase(item, pat)]
     return out
 
+#------------------------------------------------------------------------
+# 2to3
+#------------------------------------------------------------------------
 
 def run_2to3():
     import lib2to3.refactor
@@ -75,30 +99,47 @@ def run_2to3():
     # Distribute options
     # setup_args["use_2to3"] = True
 
+#------------------------------------------------------------------------
+# pyextensibletype
+#------------------------------------------------------------------------
+
+def cleanup_pyextensibletype():
+    if os.path.exists(pyext_dst):
+        shutil.rmtree(pyext_dst)
+
+def register_pyextensibletype():
+    with open(os.path.join(deps_root, '__init__.py'), 'w'):
+        pass
+    with open(os.path.join(pyext_root, '__init__.py'), 'w'):
+        pass
+
+    shutil.copytree(pyext_root, pyext_dst)
+
+    from deps.pyextensibletype import setupconfig
+    exts = setupconfig.get_extensions(pyext_dst, "numba.pyextensibletype")
+
+    return exts
+
+#------------------------------------------------------------------------
+# Generate code for build
+#------------------------------------------------------------------------
+
+build = set(sys.argv) & set(['build', 'build_ext', 'install'])
+cleanup_pyextensibletype()
+
+if build:
+    gen_type_conversion.run()
+    # TODO: Finish and release pyextensibletype
+    extensibletype_extensions = register_pyextensibletype()
+else:
+    extensibletype_extensions = []
+
 if sys.version_info[0] >= 3:
     run_2to3()
 
-numba_root = os.path.dirname(os.path.abspath(__file__))
-
-def get_include():
-    """Use numba.get_include() instead (make numba importable without
-    building it first)
-    """
-    return os.path.join(numba_root, "numba", "include")
-
-def install_pyextensibletype():
-    root = os.path.dirname(os.path.abspath(__file__))
-    pyext_root = os.path.join(root, 'deps', 'pyextensibletype')
-    subprocess.check_call([sys.executable, 'setup.py', 'install'],
-                          cwd=pyext_root)
-
-# TODO: Find a better means of knowing when to install pyextensibletype...
-if set(sys.argv) & set(('build', 'build_ext', 'install')):
-    install_pyextensibletype()
-
-numba_include_dir = get_include()
-
-gen_type_conversion.run()
+#------------------------------------------------------------------------
+# setup
+#------------------------------------------------------------------------
 
 setup(
     name="numba",
@@ -135,7 +176,7 @@ setup(
         'numba': ['*.c', '*.h', 'include/*', '*.pxd'],
         'numba.vectorize': ['*.h'],
     },
-    ext_modules=[
+    ext_modules=extensibletype_extensions + [
         Extension(
             name="numba.vectorize._internal",
             sources=["numba/vectorize/_internal.c",

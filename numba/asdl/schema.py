@@ -64,7 +64,8 @@ class SchemaError(Exception):
         super(SchemaError, self).__init__("%s: %s" % (ctxt, msg))
 
 class Schema(object):
-    '''A Schema object that is used to verify against an AST.
+    '''
+    A Schema object that is used to verify an AST.
     
     It is built from SchemaBuilder
         
@@ -244,8 +245,9 @@ class SchemaVerifier(ast.NodeVisitor):
         return ret
 
 class SchemaBuilder(asdl.VisitorBase):
-    '''A single instance of SchemaBuilder can be used build different 
-    Schema from different ASDL.
+    '''
+    A single instance of SchemaBuilder can be used to build different
+    Schemas from different ASDL inputs.
 
     Usage:
         schblr = SchemaBuilder()

@@ -140,7 +140,7 @@ class FunctionErrorEnvironment(object):
         'Function (or similar) being translated.')
 
     ast = TypedProperty(
-        ast_module.AST,
+        object, # (ast_module.AST, program.FunctionGraph),
         'Original Abstract Syntax Tree for the function being translated.')
 
     source = TypedProperty(
@@ -196,7 +196,7 @@ class FunctionEnvironment(object):
         object, 'Function (or similar) being translated.')
 
     ast = TypedProperty(
-        ast_module.AST,
+        object, # (ast_module.AST, program.FunctionGraph),
         'Abstract syntax tree for the function being translated.')
 
     func_signature = TypedProperty(

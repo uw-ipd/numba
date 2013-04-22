@@ -14,6 +14,8 @@ from numba.control_flow import control_flow
 from numba.control_flow import reaching
 from numba.control_flow import cfwarnings
 
+from numba.ir import program
+
 #---------------------------------------------------------------------------
 # Control Flow Pipeline
 #---------------------------------------------------------------------------
@@ -57,4 +59,5 @@ def build_ssa(env, ast):
         from numba.viz import cfgviz
         cfgviz.render_cfg(cfflow, dotfile)
 
-    return ast, symtab, cfflow
+    funcgraph = program.FunctionGraph(ast, env.crnt, cfflow)
+    return funcgraph, symtab, cfflow

@@ -328,7 +328,9 @@ class FlowIRBuilder(tracking.BlockTracker):
         self.ir = ir
         self.boolop_count = 0
 
+        # TODO: This is horrid
         for block in cfg.blocks:
+            block._fields = ['body']
             block.body = []
 
         self.terminators = (ast.If, ast.While, ast.For)

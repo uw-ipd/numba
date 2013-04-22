@@ -339,10 +339,10 @@ class ControlFlowAnalysis(PipelineStage):
         return True
 
     def transform(self, ast, env):
-        ast, symtab, cfg = cfentrypoints.build_ssa(env, ast)
+        funcgraph, symtab, flow = cfentrypoints.build_ssa(env, ast)
         env.crnt.symtab = symtab
-        env.crnt.cfg = cfg
-        return ast
+        env.crnt.cfg = flow
+        return funcgraph
 
 class ConstFolding(PipelineStage):
     def check_preconditions(self, ast, env):

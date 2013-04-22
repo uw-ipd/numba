@@ -301,75 +301,89 @@ def kill_unused_phis(cfg):
 # Merge Phis into AST (CFA stage)
 #------------------------------------------------------------------------
 
+# ______________________________________________________________________
+# Entry point
+
 def inject_phis(env, cfg, ast):
     "Inject phis as PhiNode nodes into the AST"
-    injector = PhiInjector(env.context, None, ast, env, cfg)
+    injector = FlowIRBuilder(env.context, None, ast, env, cfg, ir=nodes)
     return injector.visit(ast)
 
-def phi_nodes(basic_block):
-    return basic_block.phis.values()
+# ______________________________________________________________________
+# Build flowgraph with IR
 
-def merge(basic_block, node):
-    """
-    Merge the phis of the given basic block in the given node.
-    Returns a new node.
-    """
-    return ast.Suite(phi_nodes(basic_block) + [node])
+from numba.control_flow import tracking, cfstats
 
-def merge_inplace(basic_block, body_list):
+class FlowIRBuilder(tracking.BlockTracker):
     """
-    In-place merge of phi nodes from a basic block into a list of AST
-    statements.
-    """
-    nodes = body_list[:]
-    body_list[:] = phi_nodes(basic_block) + nodes
-
-class PhiInjector(visitors.NumbaTransformer):
-    """
-    Merge PHIs into AST. This happens after the CFG was build and the
+    Merge AST into CFG. This happens after the CFG was build and the
     phis computed.
     """
 
-    def __init__(self, context, func, ast, env, cfg, **kwargs):
-        super(PhiInjector, self).__init__(context, func, ast, env, **kwargs)
-        self.cfg = cfg
+    # TODO: we should likely use TAC from the beginning instead of ASTs
 
-    def visit_FunctionDef(self, node):
-        self.visitchildren(node)
-        merge_inplace(node.body_block, node.body)
-        node.body.extend(phi_nodes(self.cfg.exit_point))
+    def __init__(self, context, func, tree, env, cfg, ir):
+        super(FlowIRBuilder, self).__init__(env, func, tree, cfg)
+        self.cfg = cfg
+        self.ir = ir
+        self.boolop_count = 0
+
+        for block in cfg.blocks:
+            block.body = []
+
+        self.terminators = (ast.If, ast.While, ast.For)
+        # self.terminators = set((
+        #     'If', 'While', 'For', 'Return', 'Break', 'Continue', 'Raise',
+        #     'With',
+        # ))
+
+    def visit_block_and_body(self, block, node):
+        self.block = block
+
+        if isinstance(node, list):
+            self.collect(node)
+        else:
+            self.collect([node])
+
         return node
 
-    def handle_if_or_while(self, node, body_block):
-        self.visitchildren(node)
+    def collect(self, stmts):
+        for i, stat in enumerate(stmts):
+            stat = self.visit(stat)
+            if not isinstance(stat, self.terminators):
+                self.block.body.append(stat)
 
-        # condition
-        node.test = nodes.ExpressionNode(phi_nodes(node.cond_block), node.test)
-
-        # body
-        merge_inplace(body_block, node.body)
-
-        # exit block
-        postceding = phi_nodes(node.exit_block)
-
-        return ast.Suite([node] + postceding)
-
-    def visit_If(self, node):
-        return self.handle_if_or_while(node, node.if_block)
-
-    def visit_While(self, node):
-        return self.handle_if_or_while(node, node.while_block)
+    def visit_FunctionDef(self, node):
+        print(ast.dump(node))
+        self.block = self.flow.blocks[0]
+        self.collect(node.body)
+        return node
 
     def visit_For(self, node):
-        self.visitchildren(node)
+        node.iter = self.ir.Iter(node.iter)
+        node.target = self.ir.Next(node.target)
+        return super(FlowIRBuilder, self).visit_For(node)
 
-        preceding = phi_nodes(node.cond_block)
-        merge_inplace(node.for_block, node.body)
-        postceding = phi_nodes(node.exit_block)
-
-        for_node = cfnodes.For(node.target, node.iter, node.body, node.orelse)
-        return ast.Suite(preceding + [for_node] + postceding)
-
+    # def visit_BoolOp(self, node):
+    #     from numba import symtab
+    #
+    #     if isinstance(node.op, ast.And):
+    #         # AND: if false, short-circuit
+    #         bb_true, bb_false = node.rhs_block, node.exit_block
+    #     else:
+    #         # OR: if true, short-circuit
+    #         bb_true, bb_false = node.exit_block, node.rhs_block
+    #
+    #     cond = self.ir.CBranch(node.value[0], bb_true, bb_false)
+    #     node.lhs_block.body = [cond]
+    #     node.rhs_block.body = [node.value[1]]
+    #
+    #     var = symtab.Variable(None, name=" boolop%d" % self.boolop_count)
+    #     node.exit_block.body.append(cfstats.PhiNode(node.exit_block, var))
+    #     self.boolop_count += 1
+    #
+    #     self.block = node.exit_block
+    #     return node
 
 
 #------------------------------------------------------------------------

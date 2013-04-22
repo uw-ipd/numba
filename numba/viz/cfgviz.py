@@ -51,7 +51,7 @@ class CFGGraphAdaptor(graphviz.GraphAdaptor):
 class CFGGraphRenderer(graphviz.GraphRenderer):
 
     def render(self, node):
-        return str(node)
+        return "%s\n%s" % (node, "; ".join(map(str, node.body)))
 
 # ______________________________________________________________________
 # Entry Points
@@ -83,13 +83,5 @@ if __name__ == '__main__':
 
             y = x
             x = i # x_6
-    """)
-    source = textwrap.dedent("""
-        def func():
-            a = 0
-            b = 0
-            c = 0
-            if a < b < c:
-                print a
     """)
     render_cfg_from_source(source, os.path.expanduser("~/cfg.dot"))

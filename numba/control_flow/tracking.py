@@ -76,7 +76,7 @@ class BlockTracker(visitors.NumbaTransformer):
         return node
 
     def visit_For(self, node):
-        self.visit_attrs(node, 'cond_block', 'test')
+        self.visit_attrs(node, 'cond_block', 'target')
         self.visit_attrs(node, 'for_block', 'body')
         self.visit_attrs(node, 'else_block', 'orelse')
         self.block = node.exit_block

@@ -53,6 +53,20 @@ class While(ast.While):
         self.body = body
         self.orelse = orelse
 
+class Iter(ast.AST):
+
+    _fields = ('expr')
+
+    def __init__(self, expr):
+        self.expr = expr
+
+
+class Next(ast.AST):
+
+    _fields = ('expr')
+
+    def __init__(self, expr):
+        self.expr = expr
 
 #----------------------------------------------------------------------------
 # Utilities

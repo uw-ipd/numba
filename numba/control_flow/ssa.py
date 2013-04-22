@@ -350,19 +350,36 @@ class FlowIRBuilder(tracking.BlockTracker):
     def collect(self, stmts):
         for i, stat in enumerate(stmts):
             stat = self.visit(stat)
-            if not isinstance(stat, self.terminators):
+            print(stat)
+            if stat is not None and not isinstance(stat, self.terminators):
                 self.block.body.append(stat)
 
     def visit_FunctionDef(self, node):
-        print(ast.dump(node))
-        self.block = self.flow.blocks[0]
+        self.block = node.body_block
         self.collect(node.body)
         return node
 
     def visit_For(self, node):
-        node.iter = self.ir.Iter(node.iter)
+        self.block.body.append(self.ir.Iter(node.iter))
         node.target = self.ir.Next(node.target)
         return super(FlowIRBuilder, self).visit_For(node)
+
+    def visit_Continue(self, node):
+        loop_descr = self.loops[-1]
+        return self.ir.Jump(loop_descr.loop_block) # Jump to condition block
+
+    def visit_Break(self, node):
+        loop_descr = self.loops[-1]
+        return self.ir.Jump(loop_descr.next_block) # Jump to exit block
+
+    def terminate(self, node):
+        self.visitchildren(node)
+        self.block.body.append(node)
+        self.block = None
+        return None
+
+    visit_Return = terminate
+    visit_Raise = terminate
 
     # def visit_BoolOp(self, node):
     #     from numba import symtab

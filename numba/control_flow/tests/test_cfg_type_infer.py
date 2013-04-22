@@ -231,6 +231,7 @@ def test():
     testmod(test_cfg_type_infer)
 
 if __name__ == '__main__':
-    testmod()
+    test_conditional_assignment(0)
+    # testmod()
 #else:
 #    test()

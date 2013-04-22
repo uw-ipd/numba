@@ -8,6 +8,7 @@ from __future__ import print_function, division, absolute_import
 
 import ast
 import copy
+import types
 
 from numba import error
 from numba import nodes
@@ -19,6 +20,11 @@ class NormalizeAST(visitors.NumbaTransformer):
     "Normalize AST"
 
     function_level = 0
+
+    # TODO: Actually use numba.ir.normalized
+    ir = types.ModuleType('numba.ir.normalized')
+    vars(ir).update(vars(ast))
+    vars(ir).update(vars(nodes))
 
     #------------------------------------------------------------------------
     # Normalization
@@ -156,6 +162,14 @@ class NormalizeAST(visitors.NumbaTransformer):
         node = reduce(boolop, reversed(compare_nodes))
 
         return node
+
+    def visit_For(self, node):
+        iter = self.ir.Iter(node.iter)
+        assmnt = self.ir.Assign(targets=[node.target],
+                                value=self.ir.Next(iter))
+        loop = nodes.While(ast.Name('True', ast.Load()),
+                           [assmnt] + node.body, node.orelse)
+        return ast.Suite([iter, loop])
 
 #------------------------------------------------------------------------
 # Nodes

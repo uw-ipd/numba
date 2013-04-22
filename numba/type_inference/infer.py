@@ -1595,6 +1595,19 @@ class TypeInferer(visitors.NumbaTransformer):
     def visit_MaybeUnusedNode(self, node):
         return self.visit(node.name_node)
 
+    #------------------------------------------------------------------------
+    # Subtree sharing cruft
+    #------------------------------------------------------------------------
+
+    def visit_CloneableNode(self, node):
+        self.generic_visit(node)
+        node.type = node.node.type
+        return node
+
+    def visit_CloneNode(self, node):
+        node.type = node.node.type
+        return node
+
 
 class TypeSettingVisitor(visitors.NumbaTransformer):
     """

@@ -359,11 +359,6 @@ class FlowIRBuilder(tracking.BlockTracker):
         self.collect(node.body)
         return node
 
-    def visit_For(self, node):
-        self.block.body.append(self.ir.Iter(node.iter))
-        node.target = self.ir.Next(node.target)
-        return super(FlowIRBuilder, self).visit_For(node)
-
     def visit_Continue(self, node):
         loop_descr = self.loops[-1]
         return self.ir.Jump(loop_descr.loop_block) # Jump to condition block
@@ -371,6 +366,9 @@ class FlowIRBuilder(tracking.BlockTracker):
     def visit_Break(self, node):
         loop_descr = self.loops[-1]
         return self.ir.Jump(loop_descr.next_block) # Jump to exit block
+
+    def visit_Suite(self, node):
+        return self.collect(node.body)
 
     def terminate(self, node):
         self.visitchildren(node)

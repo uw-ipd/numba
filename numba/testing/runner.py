@@ -12,8 +12,8 @@ from numba.testing import test_support as support
 
 from numba import PY3
 
-# doctest compatible for jit or autojit numba functions
-from numba.testing.test_support import testmod
+import numba
+root = os.path.dirname(os.path.abspath(numba.__file__))
 
 # ______________________________________________________________________
 # Test filtering
@@ -136,15 +136,16 @@ def test(whitelist=None, blacklist=None, print_failures_only=False):
 
     return 0 if runner.failed == 0 else 1
 
-def run_tests(test_runner, filters):
+def run_tests(test_runner, filters, root=root):
     """
     Run tests:
 
         - Find tests in packages called 'tests'
         - Run any test files under a 'tests' package or a subpackage
     """
-    testpkg_walker = Walker("numba", filters)
+    testpkg_walker = Walker(root, filters)
 
+    print("Running tests in %s" % os.path.join(root, "numba"))
     for testpkgs, _ in testpkg_walker.walk():
         for testpkg in testpkgs:
             if os.path.basename(testpkg) == "tests":
@@ -171,7 +172,7 @@ class ProcessTestRunner(object):
     def collect(self, modname):
         self.ran += 1
         if not self.print_failures_only:
-            sys.stdout.write("running %-61s" % (modname,))
+            sys.stdout.write("%-70s" % (modname,))
 
         process = subprocess.Popen([sys.executable, '-m', modname],
                                    stdout=subprocess.PIPE,
@@ -180,13 +181,13 @@ class ProcessTestRunner(object):
 
         if process.returncode == 0:
             if not self.print_failures_only:
-                sys.stdout.write("SUCCESS\n")
+                sys.stdout.write(" SUCCESS\n")
         else:
             if self.print_failures_only:
-                sys.stdout.write("running %-61s" % (modname,))
+                sys.stdout.write("%-69s" % (modname,))
 
-            sys.stdout.write("FAILED: %s\n" % map_returncode_to_message(
-                                            process.returncode))
+            sys.stdout.write(" FAILED:\n%79s\n" % map_returncode_to_message(
+                                                        process.returncode))
             if PY3:
                 out = str(out, encoding='UTF-8')
                 err = str(err, encoding='UTF-8')

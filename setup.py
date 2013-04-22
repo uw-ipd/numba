@@ -7,10 +7,9 @@ import subprocess
 from fnmatch import fnmatchcase
 from distutils.util import convert_path
 
-try:
-    from setuptools import setup, Extension
-except ImportError:
-    from distutils.core import setup, Extension
+# Do not EVER use setuptools, it makes cythonization fail
+# Distribute fixes that
+from distutils.core import setup, Extension
 
 import numpy
 
@@ -124,7 +123,8 @@ def register_pyextensibletype():
 # Generate code for build
 #------------------------------------------------------------------------
 
-build = set(sys.argv) & set(['build', 'build_ext', 'install'])
+build = set(sys.argv) & set(['build', 'build_ext', 'install', 
+                             'bdist_wininst'])
 cleanup_pyextensibletype()
 
 if build:
@@ -133,6 +133,8 @@ if build:
     extensibletype_extensions = register_pyextensibletype()
 else:
     extensibletype_extensions = []
+
+extensibletype_include = "numba/pyextensibletype/include"
 
 if sys.version_info[0] >= 3:
     run_2to3()
@@ -159,7 +161,7 @@ setup(
         "Topic :: Utilities",
     ],
     description="compiling Python code using LLVM",
-    packages=find_packages(),
+    packages=find_packages(exclude=('*deps*',)),
     entry_points = {
         'console_scripts': [
             'pycc = numba.pycc:main',
@@ -180,17 +182,18 @@ setup(
         Extension(
             name="numba.vectorize._internal",
             sources=["numba/vectorize/_internal.c",
-                       "numba/vectorize/_ufunc.c",
-                       "numba/vectorize/_gufunc.c"],
+                     "numba/vectorize/_ufunc.c",
+                     "numba/vectorize/_gufunc.c"],
             include_dirs=[numpy.get_include(), "numba/minivect/include/"],
             depends=["numba/vectorize/_internal.h",
-                       "numba/minivect/include/miniutils.h"]),
+                     "numba/minivect/include/miniutils.h"]),
 
         Extension(
             name="numba.external.utilities.utilities",
             sources=["numba/external/utilities/utilities.c"],
-            include_dirs=[numba_include_dir],
+            include_dirs=[numba_include_dir, extensibletype_include],
             depends=["numba/external/utilities/type_conversion.c",
+                     "numba/external/utilities/virtuallookup.c",
                      "numba/external/utilities/generated_conversions.c",
                      "numba/external/utilities/generated_conversions.h"]),
         CythonExtension(

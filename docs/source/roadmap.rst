@@ -5,7 +5,61 @@ Numba Roadmap
 *******************
 
 This document describes features we want in numba, but do not
-have yet. We will order these from less involed to more involved,
+have yet. We will first list what we want in upcoming versions,
+and then what features we want in general. Those features can
+always be added to the roadmap for upcoming versions if someone
+is interested in implementing them.
+
+Numba Versions
+==============
+
+1.0
+---
+What we want for 1.0 is:
+
+    * Numba loader (loader_)
+    * IR stages (stages_)
+    * More robust type inferencer
+    * Well-defined runtime
+
+        - including exception support
+
+    * Debug info
+    * numba --annotate tool (annotate_)
+    * parallel tasks (green threads, typed channels, scheduler)
+    * generators on top of the green thread model
+
+We also like some minimal Cython support, in addition to the longer
+term goals of SEP 200. One idea from Zaur Shibzukhov is to provide
+support for Cython pxd overlays::
+
+    # foo.py
+
+    def my_function(a):
+        b = 2
+        return a ** b
+
+Such a module can be overlain with a Cython pxd file, e.g.
+
+.. code-block:: cython
+
+    # foo.pxd
+
+    cimport cython
+
+    @cython.locals(b=double)
+    cpdef my_function(double a)
+
+For some inspiration of what we can do with pxd overlays, see also:
+https://github.com/cython/cython/blob/master/Cython/Compiler/FlowControl.pxd
+
+We can now compile ``foo.py`` with Cython. We should be able to similarly
+compile ``foo.py`` with numba, using ``pycc`` as well as at runtime to produce
+a new module with annotated functions compiled in the right order.
+
+Thing we want
+=============
+We will order these from less involved to more involved,
 to provide different entry points to numba development.
 
 Less intricate
@@ -49,6 +103,8 @@ E.g.::
     intrin = numba.declare_intrinsic(int64(), "llvm.readcyclecounter")
     print intrin()
 
+.. _annotate:
+
 Source Annotator
 ----------------
 Analogous to ``cython --annotate``, a tool that annotates numba source code
@@ -65,6 +121,10 @@ also include, for each source line (expand on click?):
           see http://numba.pydata.org/numba-doc/dev/doc/ir.html
 
     * The type of each sub-expression and variable (on hover?)
+
+Issue: https://github.com/numba/numba/issues/105
+
+.. _loader:
 
 Numba Loader
 ------------

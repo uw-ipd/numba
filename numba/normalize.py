@@ -9,6 +9,7 @@ from __future__ import print_function, division, absolute_import
 import ast
 import copy
 
+from numba import error
 from numba import nodes
 from numba import visitors
 from numba import typesystem
@@ -120,11 +121,41 @@ class NormalizeAST(visitors.NumbaTransformer):
         rhs_target.ctx = ast.Load()
         ast.fix_missing_locations(rhs_target)
 
-        bin_op = ast.BinOp(rhs_target, node.op, node.value)
-        assignment = ast.Assign([target], bin_op)
+        bin_op = self.ir.BinOp(rhs_target, node.op, node.value)
+        assignment = self.ir.Assign([target], bin_op)
         assignment.inplace_op = node.op
         return self.visit(assignment)
 
+    def visit_Compare(self, node):
+        "Reduce cascaded comparisons into single comparisons"
+
+        # Process children
+        self.generic_visit(node)
+
+        # TODO: We can't generate temporaries from subexpressions since
+        # this may invalidate execution order. For now, set the type so
+        # we can clone
+        for c in node.comparators:
+            c.type = None
+
+        compare_nodes = []
+        comparators = [nodes.CloneableNode(c) for c in node.comparators]
+
+        # Build comparison nodes
+        left = node.left
+        for op, right in zip(node.ops, comparators):
+            node = self.ir.Compare(left=left, ops=[op], comparators=[right])
+            # We shouldn't need to type this...
+            node = nodes.typednode(node, typesystem.bool_)
+
+            left = right.clone
+            compare_nodes.append(node)
+
+        # AND the comparisons together
+        boolop = lambda left, right: self.ir.BoolOp(ast.And(), [left, right])
+        node = reduce(boolop, reversed(compare_nodes))
+
+        return node
 
 #------------------------------------------------------------------------
 # Nodes

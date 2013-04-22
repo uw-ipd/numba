@@ -812,6 +812,12 @@ class TypeInferer(visitors.NumbaTransformer):
         #     raise AssertionError
         assert len(node.values) >= 2
         node.values = self.visitlist(node.values)
+
+        if any(val.variable.type.is_array for val in node.values):
+            raise error.NumbaError(
+                node, "Cannot determine truth value of boolean array "
+                      "(use any or all)")
+
         node.values[:] = nodes.CoercionNode.coerce(node.values, minitypes.bool_)
         node.variable = Variable(minitypes.bool_)
         return node

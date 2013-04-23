@@ -6,55 +6,103 @@ Flow graph and operation for programs.
 
 from __future__ import print_function, division, absolute_import
 
-import llvm.core
-from . import llvm_passes, llvm_types, llvm_utils
-from .llvm_utils import llvm_context
+import collections
+
+import llvm.core as lc
+from llvmpy.api import llvm
+from .. import llvm_passes, llvm_types, llvm_utils
+from ..llvm_utils import llvm_context
+
+def make_temper():
+    temps = collections.defaultdict(int)
+
+    def temper(name):
+        count = temps[name]
+        temps[name] += 1
+        return count
+
+    return temper
+
 
 class FunctionGraph(object):
 
-    def __init__(self, blocks, temp_allocator):
-        self.blocks = blocks
-        self.temp_allocator = temp_allocator
+    def __init__(self, blocks=None, temper=None):
+        # Basic blocks in topological order
+        self.blocks = blocks or []
 
+        # name -> temp_name
+        self.temper = temper or make_temper()
+
+    def __repr__(self):
+        return "FunctionGraph(%s)" % self.blocks
 
 class Block(object):
 
-    def __init__(self, func_graph, predecessors, successors, instrs):
-        self.parent = func_graph
-        self.predecessors = predecessors
-        self.successors = successors
+    def __init__(self, func_graph, name):
+        self.func = func_graph
+        self.name = name
+        self.predecessors = []
+        self.successors = []
 
         # [Variable]
-        self.instrs = instrs
+        self.instrs = []
+
+    def add_parent(self, parent):
+        self.predecessors.append(parent)
+        parent.successors.append(self)
+
+    def append(self, instr):
+        self.instrs.append(instr)
+
+    def extend(self, instrs):
+        self.instrs.extend(instrs)
+
+    def __repr__(self):
+        return "Block(%s)" % self.instrs
 
 # ______________________________________________________________________
 
 class OperationBuilder(object):
 
-    def __init__(self, funcgraph, Block=Block, OpList=list):
+    def __init__(self, funcgraph, Block=Block):
         self.funcgraph = funcgraph
+
         self.Block = Block
-        self.OpList = OpList
         self.Variable = Variable
+        self.Operation = Operation
+        self.Constant = Constant
 
-    def add_block(self, parents):
-        block = self.Block(self.funcgraph, parents, [], self.OpList())
+        self.block_temper = make_temper()
+
+    def add_block(self, parents, name="block"):
+        name = self.block_temper(name)
+        block = self.Block(self.funcgraph, name)
+
+        block.funcgraph = self.funcgraph
         self.funcgraph.blocks.append(block)
-        for parent in parents:
-            parent.successors.append(block)
 
-    def create_variable(self, operation):
-        var = self.Variable(operation)
+        for parent in parents:
+            block.add_parent(parent)
+
+        return block
+
+    def create_variable(self, operation, name=""):
+        var = self.Variable(self.block_temper(name), operation)
+        operation.result = var
 
         # Update uses list
         for arg in operation.args:
-            if arg.is_variable:
+            if arg.is_var:
                 arg.uses.append(var)
 
         return var
 
-    def append(self, block, var):
-        block.instrs.append(var)
+    def op(self, opcode, args, name=""):
+        "Add an operation to the graph, unlinked from any basic block"
+        return self.create_variable(self.Operation(opcode, args), name)
+
+    def const(self, pyval):
+        return self.Constant(pyval)
 
 
 class Opcode(object):
@@ -70,17 +118,21 @@ class Opcode(object):
         exceptions: set of exceptions the operation may raise
     """
 
-    def __init__(self, concrete_opcode, sideeffects=True,
-                 read=True, write=True, canfold=True,
-                 exceptions=()):
+    def __init__(self, concrete_opcode, sideeffects=True, canfold=False,
+                 read=True, exceptions=()):
         self.op = concrete_opcode
 
-        self.sideeffects = sideeffects or write
+        self.sideeffects = sideeffects #or write
         self.read = read
-        self.write = write
+        # self.write = write
         self.canfold = canfold
         self.exceptions = exceptions
 
+    def __repr__(self):
+        return repr(self.op)
+
+    def __str__(self):
+        return str(self.op)
 
 class Operation(object):
     """
@@ -126,13 +178,16 @@ class Operation(object):
             At any point we can efficiently match a pattern Z(X(), *):
     """
 
-    def __init__(self, opcode, args, result):
+    def __init__(self, opcode, args):
         self.opcode = opcode
         # [Variable | Constant]
         self.args = args
 
-        self.result = result
+        # This is set by Builder.create_operation
+        self.result = None
 
+    def __repr__(self):
+        return "Operation(%s, %s)" % (self.opcode, self.args)
 
 class Value(object):
     """
@@ -148,7 +203,7 @@ class Variable(Value):
     is_var = True
 
     def __init__(self, name, operation, type=None):
-        self.name = name
+        self.name = str(name)
         self.op = operation
         self.type = type
         self.uses = []
@@ -157,7 +212,7 @@ class Variable(Value):
         self.op = other
 
     def __repr__(self):
-        return "%" + self.name
+        return "%%%s = %s" % (self.name, self.op)
 
 
 class Constant(Value):
@@ -208,8 +263,8 @@ class OperationContext(object):
     def is_conditional_branch(self, operation):
         raise NotImplementedError("is_conditional_branch")
 
-    def get_conditional_branch(self, operation):
-        raise NotImplementedError("get_conditional_branch")
+    def get_condition(self, conditional_branch):
+        return conditional_branch.args[0]
 
     def opname(self, opcode):
         return str(opcode.op)
@@ -251,9 +306,10 @@ class LLVMBuilder(object):
 
     @classmethod
     def make_func(cls, lmod, name, opague_type, argnames):
-        argtys = [llvm_types.unknown_ptr] * len(argnames)
+        argtys = [opague_type] * len(argnames)
+        restype = opague_type
         lfunc = llvm_utils.get_or_insert_func(
-            lmod, name, opague_type, argtys)
+            lmod, name, restype, argtys)
         return lfunc
 
     @classmethod
@@ -324,7 +380,8 @@ class LLVMMapper(object):
         return self.builder.call_abstract(name, llvm_args)
 
     def process_op(self, operation):
-        args = [self.llvm_values[arg] for arg in operation.args]
+        # TODO: map this properly
+        args = [self.llvm_values[arg] for arg in operation.args if arg.is_var]
         value = self.llvm_operation(operation, args)
         self.llvm_values[operation] = value
 
@@ -336,7 +393,8 @@ class LLVMMapper(object):
             self.llvm_blocks[block] = self.builder.add_block(self.builder)
 
         # Generete abstract IR
-        for block in self.funcgraph.blocks:
+        blocks = self.funcgraph.blocks
+        for block in blocks:
             for operation in block.operations[:-1]:
                 self.process_op(operation)
 
@@ -345,6 +403,12 @@ class LLVMMapper(object):
                 self.builder.builder.CreateBr(self.llvm_blocks[succ])
             elif block.operations:
                 self.terminate_block(block)
+
+        if not blocks or not self.opctx.is_return(blocks[-1]):
+            # Terminate with return
+            #self.builder.builder.CreateRetVoid()
+            self.builder.builder.CreateRet(
+                lc.Constant.null(self.builder.opague_type))
 
         self.builder.verify()
 

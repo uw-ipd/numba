@@ -12,16 +12,50 @@ from .llvm_utils import llvm_context
 
 class FunctionGraph(object):
 
-    def __init__(self, blocks):
+    def __init__(self, blocks, temp_allocator):
         self.blocks = blocks
+        self.temp_allocator = temp_allocator
+
 
 class Block(object):
 
-    def __init__(self, func_graph, predecessors, successors):
+    def __init__(self, func_graph, predecessors, successors, instrs):
         self.parent = func_graph
         self.predecessors = predecessors
         self.successors = successors
-        self.operations = []
+
+        # [Variable]
+        self.instrs = instrs
+
+# ______________________________________________________________________
+
+class OperationBuilder(object):
+
+    def __init__(self, funcgraph, Block=Block, OpList=list):
+        self.funcgraph = funcgraph
+        self.Block = Block
+        self.OpList = OpList
+        self.Variable = Variable
+
+    def add_block(self, parents):
+        block = self.Block(self.funcgraph, parents, [], self.OpList())
+        self.funcgraph.blocks.append(block)
+        for parent in parents:
+            parent.successors.append(block)
+
+    def create_variable(self, operation):
+        var = self.Variable(operation)
+
+        # Update uses list
+        for arg in operation.args:
+            if arg.is_variable:
+                arg.uses.append(var)
+
+        return var
+
+    def append(self, block, var):
+        block.instrs.append(var)
+
 
 class Opcode(object):
     """
@@ -49,10 +83,54 @@ class Opcode(object):
 
 
 class Operation(object):
+    """
+    We can employ two models:
+
+        1) operation(opcode, args, result)
+
+            Each operation has a result/target/variable.
+            We can retrieve the operations you refer to through
+            a variable store: { Variable : Operation } (i.e. use -> def)
+
+            However, this store needs to be constructed each pass in a
+            forward manner, or the store needs to be kept up to date.
+            We can write transformations like:
+
+                ops_x = {}
+                for block in blocks:
+                    for i, op in enumerate(block.ops):
+                        if op == 'X':
+                            ops_x[op.result] = op
+                        elif op == 'Y' and op.args[0] in ops_x:
+                            x_arg = ops_x[op.args[0]]
+                            block.ops[i] = Operation('Z', op.args, op.result)
+
+        2) operation(opcode, args)
+
+            Each operation is either a result/target/variable (LLVM) or
+            a Value has an operation.
+
+                class Value:
+                    Use *UseList
+                    Type type
+
+                class User(Value):
+                    Use *OperandList
+
+            Example:
+
+                %0 = X()            # oplist=[] uselist=[%2]
+                %1 = Y()            # oplist=[] uselist=[%2]
+                %2 = Z(%0, %1)      # oplist=[%0, %1] uselist=[]
+
+            At any point we can efficiently match a pattern Z(X(), *):
+    """
 
     def __init__(self, opcode, args, result):
         self.opcode = opcode
+        # [Variable | Constant]
         self.args = args
+
         self.result = result
 
 
@@ -69,8 +147,14 @@ class Variable(Value):
 
     is_var = True
 
-    def __init__(self, name):
+    def __init__(self, name, operation, type=None):
         self.name = name
+        self.op = operation
+        self.type = type
+        self.uses = []
+
+    def replace(self, other):
+        self.op = other
 
     def __repr__(self):
         return "%" + self.name
@@ -81,8 +165,9 @@ class Constant(Value):
 
     is_const = True
 
-    def __init__(self, const):
+    def __init__(self, const, type=None):
         self._const = const
+        self.type = type
 
     @property
     def const(self):

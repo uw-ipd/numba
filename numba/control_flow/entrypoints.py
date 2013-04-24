@@ -59,5 +59,5 @@ def build_ssa(env, ast):
         from numba.viz import cfgviz
         cfgviz.render_cfg(cfflow, dotfile)
 
-    funcgraph = program.FunctionGraph(ast, env.crnt, cfflow)
+    funcgraph = program.FunctionDef(ast, env.crnt, cfflow)
     return funcgraph, symtab, cfflow

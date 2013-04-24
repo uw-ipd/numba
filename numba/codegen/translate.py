@@ -594,6 +594,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         if isinstance(node.ctx, ast.Store):
             self.add_def(node.variable)
 
+        print(node, node.id)
         var = node.variable
         if (var.lvalue is None and not var.renameable and
                 self.symtab[node.id].is_cellvar):

@@ -7,6 +7,8 @@ AST or any code blocks in the AST (see cfnodes for that).
 
 from __future__ import print_function, division, absolute_import
 
+import ast
+
 from numba import error
 from numba.control_flow import basicblocks
 
@@ -14,7 +16,9 @@ from numba.control_flow import basicblocks
 # CFG basic blocks
 #----------------------------------------------------------------------------
 
-class ControlBlock(basicblocks.BasicBlock):
+class ControlBlock(basicblocks.BasicBlock,
+                   # TODO: Hack, needed to cooperate with AST visitors for now
+                   ast.AST):
     """
     Control flow graph node. This contains a sequence of assignments and
     name references.
@@ -33,6 +37,10 @@ class ControlBlock(basicblocks.BasicBlock):
         gen = {Entry(a): Assignment(a), Entry(b): Assignment(b)}
         bound = set([Entry(a), Entry(c)])
     """
+
+    # TODO: We will move away from this towards a FunctionFlowGraph
+    # with blocks with phi_nodes as leading statements
+    _fields = ['phi_nodes', 'body']
 
     def __init__(self, id, label, pos):
         super(ControlBlock, self).__init__(id, label, pos)

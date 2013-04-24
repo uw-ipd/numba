@@ -591,10 +591,17 @@ class ComposedPipelineStage(PipelineStage):
 
     def transform(self, ast, env):
         logger.debug('Running composed stages: %s', self.stages)
-        for stage in self.stages:
+
+        for i, stage in enumerate(self.stages):
             if env.debug:
-                stage_tuple = (stage, utils.ast2tree(ast))
-                logger.debug(pprint.pformat(stage_tuple))
+                # stage_tuple = (stage, utils.ast2tree(ast))
+                # logger.debug(pprint.pformat(stage_tuple))
+
+                from numba.viz import cfgviz
+                from numba.ir import program
+                if isinstance(ast, program.FunctionDef):
+                    cfgviz.render_cfg(ast, os.path.expanduser("~/cfg%d.dot" % i))
+
             ast = stage(ast, env)
         return ast
 

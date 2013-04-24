@@ -724,7 +724,8 @@ class LateSpecializer(ResolveCoercions, LateBuiltinResolverMixin,
 
     def visit_Assign(self, node):
         target = node.targets[0]
-        print(ast.dump(target), target.variable)
+        print(ast.dump(target), target.variable.unmangled_name)
+        print(node.value)
         target_is_subscript = (len(node.targets) == 1 and
                                isinstance(target, ast.Subscript))
         if target_is_subscript and is_obj(target.type):

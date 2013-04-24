@@ -66,7 +66,7 @@ class GraphvizGenerator(object):
         "Create a graphviz node from the miniast node"
         label = self.graph_renderer.render(node)
         self.counter += 1
-        pydot_node = pydot.Node(str(self.counter), label=label)
+        pydot_node = pydot.Node(str(self.counter), label=label, shape='box')
         self.graph.add_node(pydot_node)
         return pydot_node
 
@@ -118,6 +118,7 @@ class GraphRenderer(object):
 #------------------------------------------------------------------------
 
 def write_image(dot_output):
+
     prefix, ext = os.path.splitext(dot_output)
     png_output = prefix + '.png'
 
@@ -151,5 +152,8 @@ def render(G, output_file, adaptor, renderer,
     for root in G:
         gen.dfs(root)
 
-    gen.graph.write(output_file)
+    dotgraph = gen.graph
+    # output_file, ext = os.path.splitext(output_file)
+    # dotgraph.write(output_file + '.png', format='png')
+    dotgraph.write(output_file)
     write_image(output_file)

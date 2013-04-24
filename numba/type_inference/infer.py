@@ -147,6 +147,10 @@ class TypeInferer(visitors.NumbaTransformer):
 
     def initialize_ssa(self):
         "Propagate argument types to first rename of the variable in the block"
+        for var in self.ast.blocks[0].symtab.values():
+            if var.uninitialized:
+                var.type = typesystem.UninitializedType(None)
+
         for var in self.symtab.values():
             if var.parent_var and not var.parent_var.parent_var:
                 var.type = var.parent_var.type
@@ -254,7 +258,7 @@ class TypeInferer(visitors.NumbaTransformer):
         self.analyse = False
         self.function_level += 1
 
-        for block in cfg.blocks:
+        for block in cfg.blocks[1:]:
             # print block
             phis = []
             for phi in block.phi_nodes:
@@ -1617,10 +1621,9 @@ class TypeSettingVisitor(visitors.NumbaTransformer):
 
     def visit_FunctionDef(self, node):
         self.generic_visit(node)
-        if self.env.crnt.cfg:
-            for block in self.env.crnt.cfg.blocks:
-                for phi in block.phi_nodes:
-                    self.handle_phi(phi)
+        for block in node.blocks:
+            for phi in block.phi_nodes:
+                self.handle_phi(phi)
 
         rettype = self.func_signature.return_type
         if rettype.is_unresolved:

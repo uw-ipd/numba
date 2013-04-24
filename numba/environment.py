@@ -796,6 +796,7 @@ class NumbaEnvironment(_AbstractNumbaEnvironment):
         # them should be updated.
         context = self.context
         context.env = self
+        self.debug = True
         context.numba_pipeline = actual_default_pipeline
         context.function_cache = self.specializations
         context.intrinsic_library = default_intrinsic_library(context)

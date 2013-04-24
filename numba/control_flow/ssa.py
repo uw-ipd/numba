@@ -201,6 +201,7 @@ class SSAifier(object):
             if var.renameable:
                 new_var = symbol_table.rename(var, self.blocks[0])
                 new_var.uninitialized = var.name not in argnames
+                # self.blocks[0].phis[new_var] = PhiNode(self.blocks[0], new_var)
 
         self.rename_assignments(self.blocks[0])
 
@@ -219,6 +220,8 @@ class SSAifier(object):
         for block in self.blocks:
             # Insert phis in CFG
             block.phi_nodes = block.phis.values()
+
+        for block in self.blocks[1:]:
             for variable, phi in block.phis.iteritems():
                 for parent in block.parents:
                     incoming_var = parent.symtab.lookup_most_recent(variable.name)
@@ -330,7 +333,6 @@ class FlowIRBuilder(tracking.BlockTracker):
 
         # TODO: This is horrid
         for block in cfg.blocks:
-            block._fields = ['body']
             block.body = []
 
         self.terminators = (ast.If, ast.While, ast.For)
@@ -481,19 +483,21 @@ def initialize_uninitialized(phi_node, badvals):
             incoming_type = incoming_var.type.base_type or phi_node.type
             bad = nodes.badval(incoming_type)
             incoming_var.type.base_type = incoming_type
-
             badvals[incoming_var] = bad
             # incoming_var.uninitialized_value = bad
 
-def merge_badvals(env, func_ast, badvals):
+def merge_badvals(env, funcgraph, badvals):
     assmnts = []
     for var in badvals:
+        ref, = var.cf_references
+        var.type = ref.type
         name = nodes.Name(id=var.renamed_name, ctx=ast.Store())
         name.variable = var
+        name.type = var.type
         assmnts.append(ast.Assign(targets=[name], value=badvals[var]))
 
-    func_ast.body = assmnts + func_ast.body
-    return func_ast
+    funcgraph.blocks[0].body = assmnts + funcgraph.blocks[0].body
+    return funcgraph
 
 def promote_incoming(phi_node, promotions):
     """

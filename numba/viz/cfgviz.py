@@ -11,6 +11,7 @@ import ast
 import textwrap
 
 from numba import void
+from numba import utils
 from numba import pipeline
 from numba import environment
 from numba.viz import graphviz
@@ -48,10 +49,18 @@ class CFGGraphAdaptor(graphviz.GraphAdaptor):
 # ______________________________________________________________________
 # Renderer
 
+def fmtnode(node):
+    if isinstance(node, ast.Assign):
+        return "%s = %s" % (node.targets, node.value)
+    else:
+        return str(node)
+
+# fmtnode = utils.pformat_ast # ast.dump # str
+
 class CFGGraphRenderer(graphviz.GraphRenderer):
 
     def render(self, node):
-        return "%s\n%s" % (node, "; ".join(map(str, node.body)))
+        return "%s\n%s" % (node, "; ".join(map(fmtnode, node.body)))
 
 # ______________________________________________________________________
 # Entry Points

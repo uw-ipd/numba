@@ -223,7 +223,7 @@ def test_error_array_variable1(value, obj1):
     """
     if value < 1:
         obj1 = np.empty(10, dtype=np.float32)
-    
+
     return obj1
 
 def test():

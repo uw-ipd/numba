@@ -52,6 +52,7 @@ class Name(ast.Name, ExprNode):
     raise_unbound_node = None
 
     _fields = ast.Name._fields + ('check_unbound',)
+    _attributes = ('variable',)
 
     def __init__(self, id, ctx, *args, **kwargs):
         super(Name, self).__init__(*args, **kwargs)

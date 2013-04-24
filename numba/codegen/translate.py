@@ -473,6 +473,12 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
     # Assignment
     #------------------------------------------------------------------------
 
+    def visit_FunctionDef(self, node):
+        # self.visitlist(node.blocks)
+        for block in node.blocks:
+            self.visitlist(block.body)
+        return node
+
     def visit_Assign(self, node):
         target_node = node.targets[0]
         # print target_node
@@ -496,7 +502,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
             if target_node.id not in self.object_local_temps:
                 target = self._null_obj_temp(target_node.id, change_bb=True)
                 self.object_local_temps[target_node.id] = target
-                decref = bool(self.loop_beginnings)
+                decref = True # bool(self.loop_beginnings)
             else:
                 target = self.object_local_temps[target_node.id]
 
@@ -1225,7 +1231,7 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
         self.builder.position_at_end(bb)
         rhs = self.visit(node.node)
         self.generate_assign_stack(rhs, lhs, tbaa_type=object_,
-                                   decref=self.in_loop)
+                                   decref=True) #self.in_loop)
 
         # goto error if NULL
         # self.puts("checking error... %s" % error.format_pos(node))

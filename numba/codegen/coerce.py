@@ -4,6 +4,7 @@ import llvm
 
 from numba import *
 from numba import nodes
+from numba import llvm_types
 from numba.typesystem import is_obj, promote_to_native
 from numba.codegen.codeutils import llvm_alloca, if_badval
 from numba.codegen import debug
@@ -69,7 +70,7 @@ class ObjectCoercer(object):
 
         if callback:
             if_badval(self.translator, int_result, NULL,
-                      callback=callback or default_callback, cmp=cmp)
+                      callback=callback, cmp=cmp)
         else:
             test = self.builder.icmp(cmp, int_result, NULL)
             name = 'no_error'

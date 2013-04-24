@@ -55,7 +55,7 @@ def fmtnode(node):
     else:
         return str(node)
 
-# fmtnode = utils.pformat_ast # ast.dump # str
+fmtnode = utils.pformat_ast # ast.dump # str
 
 class CFGGraphRenderer(graphviz.GraphRenderer):
 

@@ -64,6 +64,27 @@ def make_testprogram():
 
     return g
 
+def get_passes():
+    from llvmpy.api import llvm
+
+    passreg = llvm.PassRegistry.getPassRegistry()
+
+    # llvm.initializeCore(passreg)
+    llvm.initializeScalarOpts(passreg)
+    # llvm.initializeVectorization(passreg)
+    # llvm.initializeIPO(passreg)
+    # llvm.initializeAnalysis(passreg)
+    # llvm.initializeIPA(passreg)
+    # llvm.initializeTransformUtils(passreg)
+    # llvm.initializeInstCombine(passreg)
+    # llvm.initializeInstrumentation(passreg)
+    # llvm.initializeTarget(passreg)
+
+    def _dump_all_passes():
+        for name, desc in passreg.enumerate():
+            yield name, desc
+    return dict(_dump_all_passes())
+
 def LICM():
     g = make_testprogram()
     print(g)
@@ -71,6 +92,7 @@ def LICM():
     lfunc = llvm_mapper.make_llvm_graph()
     print(lfunc)
 
-    llvm_passes
+    llvm_passes.run_function_passses(lfunc, get_passes()) #llvm_passes.PASSES)
+    print(lfunc)
 
 LICM()

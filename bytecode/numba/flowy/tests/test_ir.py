@@ -2,6 +2,7 @@
 
 from __future__ import print_function, division, absolute_import
 
+from ... import llvm_passes
 from .. import flowy
 from ..flowy import Opcode
 
@@ -26,18 +27,26 @@ class OpContext(flowy.OperationContext):
     def is_terminator(self, operation):
         return operation.opcode.op == "cbranch"
 
+    def is_conditional_branch(self, operation):
+        return operation.opcode.op == "cbranch"
+
     def get_condition(self, conditional_branch):
         return conditional_branch.args[0]
 
+    def is_boolean_operation(self, operation):
+        return operation.opcode.op in ("int_eq",)
+
+opctx = OpContext()
+
 def make_testprogram():
-    g = flowy.FunctionGraph()
+    g = flowy.FunctionGraph("test_program")
     builder = flowy.OperationBuilder(g)
 
     # if x: ...
     entry = builder.add_block([], "entry")
     cond_block = builder.add_block([entry], "cond")
     loop_block = builder.add_block([cond_block], "loop")
-    exit_block = builder.add_block([cond_block, loop_block])
+    exit_block = builder.add_block([cond_block])
 
     cond_block.add_parent(loop_block)
 
@@ -49,13 +58,19 @@ def make_testprogram():
     op1 = builder.op(opdict["int_mul"], [c1, c2])
     op2 = builder.op(opdict["tuple_new"], [c1, c2, op1])
 
+    entry.append(eq)
     cond_block.append(cbr)
     loop_block.extend([op1, op2])
 
     return g
 
-def test_LICM():
+def LICM():
     g = make_testprogram()
     print(g)
+    llvm_mapper = flowy.LLVMMapper(g, opctx)
+    lfunc = llvm_mapper.make_llvm_graph()
+    print(lfunc)
 
-test_LICM()
+    llvm_passes
+
+LICM()

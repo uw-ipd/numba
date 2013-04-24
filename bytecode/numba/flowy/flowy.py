@@ -10,7 +10,7 @@ import collections
 
 import llvm.core as lc
 from llvmpy.api import llvm
-from .. import llvm_passes, llvm_types, llvm_utils
+from .. import llvm_passes, llvm_types, llvm_utils, llvm_const
 from ..llvm_utils import llvm_context
 
 def make_temper():
@@ -19,14 +19,21 @@ def make_temper():
     def temper(name):
         count = temps[name]
         temps[name] += 1
-        return count
+        if name and count == 0:
+            return name
+        elif name:
+            return '%s_%d' % (name, count)
+        else:
+            return str(count)
 
     return temper
 
 
 class FunctionGraph(object):
 
-    def __init__(self, blocks=None, temper=None):
+    def __init__(self, name, blocks=None, temper=None):
+        self.name = name
+
         # Basic blocks in topological order
         self.blocks = blocks or []
 
@@ -51,6 +58,9 @@ class Block(object):
         self.predecessors.append(parent)
         parent.successors.append(self)
 
+    def __iter__(self):
+        return iter(self.instrs)
+
     def append(self, instr):
         self.instrs.append(instr)
 
@@ -58,7 +68,7 @@ class Block(object):
         self.instrs.extend(instrs)
 
     def __repr__(self):
-        return "Block(%s)" % self.instrs
+        return "Block(%s, %s)" % (self.name, self.instrs)
 
 # ______________________________________________________________________
 
@@ -187,7 +197,8 @@ class Operation(object):
         self.result = None
 
     def __repr__(self):
-        return "Operation(%s, %s)" % (self.opcode, self.args)
+        args = [var.varname if var.is_var else var for var in self.args]
+        return "Operation(%s, %s)" % (self.opcode, args)
 
 class Value(object):
     """
@@ -204,15 +215,33 @@ class Variable(Value):
 
     def __init__(self, name, operation, type=None):
         self.name = str(name)
-        self.op = operation
+        self.operation = operation
         self.type = type
         self.uses = []
 
     def replace(self, other):
-        self.op = other
+        self.operation = other
+
+    @property
+    def varname(self):
+        return '%' + self.name
+
+    @property
+    def opcode(self):
+        """
+        Opcode of the operation of this variable.
+        """
+        return self.operation.opcode
+
+    @property
+    def opname(self):
+        """
+        Opcode name or object associated with the operation of this variable.
+        """
+        return self.opcode.op
 
     def __repr__(self):
-        return "%%%s = %s" % (self.name, self.op)
+        return "%s = %s" % (self.varname, self.operation)
 
 
 class Constant(Value):
@@ -266,6 +295,9 @@ class OperationContext(object):
     def get_condition(self, conditional_branch):
         return conditional_branch.args[0]
 
+    def is_boolean_operation(self, operation):
+        raise NotImplementedError
+
     def opname(self, opcode):
         return str(opcode.op)
 
@@ -314,9 +346,9 @@ class LLVMBuilder(object):
 
     @classmethod
     def make_builder(cls, lfunc):
-        entry = cls.make_block(lfunc, "entry")
+        # entry = cls.make_block(lfunc, "entry")
         builder = llvm.IRBuilder.new(llvm_context)
-        builder.SetInsertPoint(entry)
+        # builder.SetInsertPoint(entry)
         return builder
 
     @classmethod
@@ -343,19 +375,27 @@ class LLVMBuilder(object):
     def run_passes(self, passes):
         llvm_passes.run_function_passses(self.lfunc, passes)
 
-    def call_abstract(self, name, *args):
+    def call_abstract(self, name, restype, *args):
         argtys = [x.getType() for x in args]
         callee = llvm_utils.get_or_insert_func(self.lmod, name,
-                                               self.opague_type, argtys)
+                                               restype, argtys)
         return self.builder.CreateCall(callee, args)
 
     def call_abstract_pred(self, name, *args):
-        is_vararg = False
         argtys = [x.getType() for x in args]
         retty = llvm_types.i1
         callee = llvm_utils.get_or_insert_func(self.lmod, name,
                                                retty, argtys)
         return self.builder.CreateCall(callee, args)
+
+
+class LLVMOperationTyper(object):
+
+    def __init__(self, builder):
+        self.builder = builder
+
+    def llvm_restype(self, operation):
+        return self.builder.opague_type
 
 
 class LLVMMapper(object):
@@ -365,7 +405,8 @@ class LLVMMapper(object):
     def __init__(self, funcgraph, opctx):
         self.funcgraph = funcgraph
         self.opctx = opctx
-        self.builder = self.LLVMBuilder()
+        self.builder = self.LLVMBuilder(funcgraph.name,
+                                        llvm_types.unknown_ptr, [])
 
         # Operation -> LLVM Value
         self.llvm_values = {}
@@ -377,50 +418,62 @@ class LLVMMapper(object):
         name = self.opctx.opname(operation.opcode)
         # include operation arity in name
         name = '%s_%d' % (name, len(operation.args))
-        return self.builder.call_abstract(name, llvm_args)
+        if self.opctx.is_boolean_operation(operation):
+            restype = llvm_types.i1
+        else:
+            restype = self.builder.opague_type
+        return self.builder.call_abstract(name, restype, *llvm_args)
 
-    def process_op(self, operation):
+    def process_op(self, var):
         # TODO: map this properly
-        args = [self.llvm_values[arg] for arg in operation.args if arg.is_var]
-        value = self.llvm_operation(operation, args)
-        self.llvm_values[operation] = value
+        args = [self.llvm_values[arg]
+                    for arg in var.operation.args if arg.is_var]
+        value = self.llvm_operation(var.operation, args)
+        self.llvm_values[var] = value
 
     def make_llvm_graph(self):
         "Populate the LLVM Function with abstract IR"
+        blocks = self.funcgraph.blocks
+        assert blocks
 
         # Allocate blocks
-        for block in self.funcgraph.blocks:
-            self.llvm_blocks[block] = self.builder.add_block(self.builder)
+        for block in blocks:
+            self.llvm_blocks[block] = self.builder.add_block(block.name)
 
         # Generete abstract IR
-        blocks = self.funcgraph.blocks
         for block in blocks:
-            for operation in block.operations[:-1]:
-                self.process_op(operation)
+            # print("block", block.name, len(block.successors))
+            self.builder.builder.SetInsertPoint(self.llvm_blocks[block])
+
+            for var in block.instrs[:-1]:
+                self.process_op(var)
 
             if len(block.successors) == 1:
+                if block.instrs: self.process_op(block.instrs[-1])
                 succ, = block.successors
                 self.builder.builder.CreateBr(self.llvm_blocks[succ])
-            elif block.operations:
+            elif block.instrs:
                 self.terminate_block(block)
 
-        if not blocks or not self.opctx.is_return(blocks[-1]):
+        if not block.instrs or not self.opctx.is_return(blocks[-1]):
             # Terminate with return
             #self.builder.builder.CreateRetVoid()
             self.builder.builder.CreateRet(
-                lc.Constant.null(self.builder.opague_type))
+                llvm_const.null(self.builder.opague_type))
 
+        print(self.builder.lfunc)
         self.builder.verify()
+        return self.builder.lfunc
 
     def terminate_block(self, block):
         "Terminate a block with conditional branch"
-        op = block.operations[-1]
+        op = block.instrs[-1].operation
 
-        assert self.opctx.is_terminator(op)
+        assert self.opctx.is_terminator(op), op
         assert self.opctx.is_conditional_branch(op)
         assert len(block.successors) == 2
 
-        cond = self.opctx.get_conditional_branch(op)
+        cond = self.opctx.get_condition(op)
         lcond = self.llvm_values[cond]
 
         succ1, succ2 = block.successors

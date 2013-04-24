@@ -8,7 +8,6 @@ from __future__ import print_function, division, absolute_import
 
 import collections
 
-import llvm.core as lc
 from llvmpy.api import llvm
 from .. import llvm_passes, llvm_types, llvm_utils, llvm_const
 from ..llvm_utils import llvm_context
@@ -379,6 +378,7 @@ class LLVMBuilder(object):
         argtys = [x.getType() for x in args]
         callee = llvm_utils.get_or_insert_func(self.lmod, name,
                                                restype, argtys)
+        callee.setLinkage(llvm.GlobalValue.LinkageTypes.ExternalLinkage)
         return self.builder.CreateCall(callee, args)
 
     def call_abstract_pred(self, name, *args):

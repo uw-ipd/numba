@@ -2,9 +2,10 @@
 
 from __future__ import print_function, division, absolute_import
 
-from ... import llvm_passes
-from .. import flowy
-from ..flowy import Opcode
+from numba.experimental import llvm_passes
+from numba.control_flow import flowy
+print(flowy)
+from numba.control_flow.flowy import Opcode
 
 simple_ops = [
     # Need a data dependence graph to optimize these
@@ -69,16 +70,16 @@ def get_passes():
 
     passreg = llvm.PassRegistry.getPassRegistry()
 
-    # llvm.initializeCore(passreg)
+    llvm.initializeCore(passreg)
     llvm.initializeScalarOpts(passreg)
-    # llvm.initializeVectorization(passreg)
-    # llvm.initializeIPO(passreg)
-    # llvm.initializeAnalysis(passreg)
-    # llvm.initializeIPA(passreg)
-    # llvm.initializeTransformUtils(passreg)
-    # llvm.initializeInstCombine(passreg)
-    # llvm.initializeInstrumentation(passreg)
-    # llvm.initializeTarget(passreg)
+    llvm.initializeVectorization(passreg)
+    llvm.initializeIPO(passreg)
+    llvm.initializeAnalysis(passreg)
+    llvm.initializeIPA(passreg)
+    llvm.initializeTransformUtils(passreg)
+    llvm.initializeInstCombine(passreg)
+    llvm.initializeInstrumentation(passreg)
+    llvm.initializeTarget(passreg)
 
     def _dump_all_passes():
         for name, desc in passreg.enumerate():
@@ -95,4 +96,6 @@ def LICM():
     llvm_passes.run_function_passses(lfunc, get_passes()) #llvm_passes.PASSES)
     print(lfunc)
 
-LICM()
+if __name__ == "__main__":
+    # LICM()
+    pass

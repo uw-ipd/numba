@@ -9,8 +9,8 @@ from __future__ import print_function, division, absolute_import
 import collections
 
 from llvmpy.api import llvm
-from .. import llvm_passes, llvm_types, llvm_utils, llvm_const
-from ..llvm_utils import llvm_context
+from numba.experimental import llvm_passes, llvm_types, llvm_utils, llvm_const
+from numba.experimental.llvm_utils import llvm_context
 
 def make_temper():
     temps = collections.defaultdict(int)

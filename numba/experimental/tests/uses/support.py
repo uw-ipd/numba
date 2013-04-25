@@ -1,5 +1,5 @@
 import os, unittest, numpy as np
-from numba import pipeline, execution
+from ... import pipeline, execution
 
 class TestCase(unittest.TestCase):
     def run_template(self, func, args=(), allclose=False):

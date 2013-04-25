@@ -22,6 +22,7 @@ EXCLUDE_TEST_PACKAGES = [
     "numba.minivect",
     "numba.pyextensibletype",
     "numba.tests.broken_issues",
+    "numba.experimental",
 ]
 
 def make_path(root, predicate):

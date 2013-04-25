@@ -1,4 +1,4 @@
-from numba import translate
+from .. import translate
 
 def test1(a, b):
     return a + b

@@ -54,10 +54,6 @@ class Block(basicblocks.BasicBlock):
         # [Variable]
         self.instrs = []
 
-    def add_parent(self, parent):
-        self.parents.add(parent)
-        parent.children.add(self)
-
     def __iter__(self):
         return iter(self.instrs)
 
@@ -84,15 +80,15 @@ class OperationBuilder(object):
 
         self.block_temper = make_temper()
 
-    def add_block(self, parents, name="block", pos=None):
-        name = self.block_temper(name)
+    def add_block(self, parents, name=None, pos=None):
+        name = self.block_temper(name or "block")
         block = self.Block(len(self.funcgraph.blocks), name, pos)
         block.funcgraph = self.funcgraph
 
         self.funcgraph.blocks.append(block)
 
         for parent in parents:
-            block.add_parent(parent)
+            block.add_parents(parent)
 
         return block
 
@@ -113,6 +109,42 @@ class OperationBuilder(object):
 
     def const(self, pyval):
         return self.Constant(pyval)
+
+    #------------------------------------------------------------------------
+    # Some utilities for dealing with basic blocks
+    #------------------------------------------------------------------------
+
+    def splitblock(self, block, instr, name=None):
+        children = block.children
+        block.detach_children()
+        newblock = self.add_block([block], name)
+        newblock.add_children(*children)
+
+        split_idx = block.instrs.index(instr) # TODO: allow for linked lists
+        before, after = block.instrs[:split_idx], block.instrs[split_idx:]
+        block.instrs = before
+        newblock.instrs = after
+
+        return newblock
+
+    def if_then_else(self, block, instr, condition, if_body, else_body=None):
+        cond_block = self.add_block([block])
+        cond_block.append(condition)
+
+        exit_block = self.splitblock(block, instr)
+        exit_block.detach_parents()
+
+        if_block = self.add_block([cond_block])
+        if_block.instrs = if_body
+
+        if else_body:
+            else_block = self.add_block([cond_block])
+            else_block.instrs = else_body
+        else:
+            else_block = cond_block
+
+        exit_block.add_parents([if_block, else_block])
+        # return if_block, else_block, exit_block
 
 
 class Opcode(object):

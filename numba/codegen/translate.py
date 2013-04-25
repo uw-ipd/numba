@@ -441,10 +441,10 @@ class LLVMCodeGenerator(expanding.ControlFlowExpander,
             self.visit(self.ast)
 
         if self.flow.block:
-            self.flow.block.add_child(cleanup_block)
+            self.flow.block.add_children(cleanup_block)
 
-        cleanup_block.add_child(error_block)
-        error_block.add_child(self.flow.exit_point)
+        cleanup_block.add_children(error_block)
+        error_block.add_children(self.flow.exit_point)
 
         self.flow.blocks.extend([cleanup_block, error_block])
 

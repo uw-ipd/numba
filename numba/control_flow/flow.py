@@ -88,7 +88,7 @@ class Flow(object):
         block = self.BasicBlock(id, pos=pos, label=label)
         self.blocks.append(block)
         if parent:
-            parent.add_child(block)
+            parent.add_children(block)
 
         return block
 
@@ -99,7 +99,7 @@ class Flow(object):
         """
         block = self.newblock(pos, label, parent)
         if not parent and self.block:
-            self.block.add_child(block)
+            self.block.add_children(block)
 
         self.block = block
         return block

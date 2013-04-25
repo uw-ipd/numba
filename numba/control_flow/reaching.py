@@ -120,7 +120,7 @@ class ReachingDefs(object):
             if block.empty():
                 for parent in block.parents: # Re-parent
                     for child in block.children:
-                        parent.add_child(child)
+                        parent.add_children(child)
                 block.detach()
                 unreachable.add(block)
         blocks -= unreachable

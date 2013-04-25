@@ -63,7 +63,7 @@ class ControlFlowExpander(visitors.NumbaTransformer):
 
         # Exit point
         if self.flow.block:
-            self.flow.block.add_child(self.flow.exit_point)
+            self.flow.block.add_children(self.flow.exit_point)
 
         self.flow.add_floating(self.flow.exit_point)
 
@@ -108,7 +108,7 @@ class ControlFlowExpander(visitors.NumbaTransformer):
         self.visitlist(node.body)
 
         if self.flow.block:
-            self.flow.block.add_child(exit_block)
+            self.flow.block.add_children(exit_block)
 
     def handle_else_clause(self, node, cond_block, exit_block):
         if node.orelse:
@@ -118,16 +118,16 @@ class ControlFlowExpander(visitors.NumbaTransformer):
             self.visitlist(node.orelse)
 
             if self.flow.block:
-                self.flow.block.add_child(exit_block)
+                self.flow.block.add_children(exit_block)
         else:
             # No else clause, the exit block is a child of the condition
-            cond_block.add_child(exit_block)
+            cond_block.add_children(exit_block)
             node.else_block = None
 
     def finalize_loop(self, node, cond_block, exit_block):
         if self.flow.block:
             # Add back-edge
-            self.flow.block.add_child(cond_block)
+            self.flow.block.add_children(cond_block)
 
         self.handle_else_clause(node, cond_block, exit_block)
 
@@ -180,7 +180,7 @@ class ControlFlowExpander(visitors.NumbaTransformer):
     def visit_Raise(self, node):
         self.visitchildren(node)
         if self.flow.exceptions:
-            self.flow.block.add_child(self.flow.exceptions[-1].entry_point)
+            self.flow.block.add_children(self.flow.exceptions[-1].entry_point)
 
         self.flow.block = None
         return node
@@ -190,13 +190,13 @@ class ControlFlowExpander(visitors.NumbaTransformer):
 
         for exception in self.flow.exceptions[::-1]:
             if exception.finally_enter:
-                self.flow.block.add_child(exception.finally_enter)
+                self.flow.block.add_children(exception.finally_enter)
                 if exception.finally_exit:
-                    exception.finally_exit.add_child(self.flow.exit_point)
+                    exception.finally_exit.add_children(self.flow.exit_point)
                 break
         else:
             if self.flow.block:
-                self.flow.block.add_child(self.flow.exit_point)
+                self.flow.block.add_children(self.flow.exit_point)
 
         self.flow.block = None
         return node
@@ -208,12 +208,12 @@ class ControlFlowExpander(visitors.NumbaTransformer):
         loop = self.flow.loops[-1]
         for exception in loop.exceptions[::-1]:
             if exception.finally_enter:
-                self.flow.block.add_child(exception.finally_enter)
+                self.flow.block.add_children(exception.finally_enter)
                 if exception.finally_exit:
-                    exception.finally_exit.add_child(loop.next_block)
+                    exception.finally_exit.add_children(loop.next_block)
                 break
         else:
-            self.flow.block.add_child(loop.next_block)
+            self.flow.block.add_children(loop.next_block)
 
         self.flow.block = None
         return node
@@ -225,12 +225,12 @@ class ControlFlowExpander(visitors.NumbaTransformer):
         loop = self.flow.loops[-1]
         for exception in loop.exceptions[::-1]:
             if exception.finally_enter:
-                self.flow.block.add_child(exception.finally_enter)
+                self.flow.block.add_children(exception.finally_enter)
                 if exception.finally_exit:
-                    exception.finally_exit.add_child(loop.loop_block)
+                    exception.finally_exit.add_children(loop.loop_block)
                 break
         else:
-            self.flow.block.add_child(loop.loop_block)
+            self.flow.block.add_children(loop.loop_block)
 
         self.flow.block = None
         return node
@@ -245,7 +245,7 @@ class ControlFlowExpander(visitors.NumbaTransformer):
             node.rhs_block = self.flow.nextblock(node.values[1], 'rhs_op')
             node.value[1] = self.visit(node.value[1])
 
-            node.lhs_block.add_child(node.exit_block)
-            node.rhs_block.add_child(node.exit_block)
+            node.lhs_block.add_children(node.exit_block)
+            node.rhs_block.add_children(node.exit_block)
 
         return node

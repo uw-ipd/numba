@@ -49,7 +49,7 @@ def make_testprogram():
     loop_block = builder.add_block([cond_block], "loop")
     exit_block = builder.add_block([cond_block])
 
-    cond_block.add_parent(loop_block)
+    cond_block.add_parents(loop_block)
 
     c1 = builder.const(1)
     c2 = builder.const(2)

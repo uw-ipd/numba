@@ -9,7 +9,7 @@ from __future__ import print_function, division, absolute_import
 from numba.oset import OrderedSet
 
 #----------------------------------------------------------------------------
-# CFG basic blocks
+# CFG basic block interface
 #----------------------------------------------------------------------------
 
 class BasicBlock(object):
@@ -34,22 +34,34 @@ class BasicBlock(object):
         self.label = label
         self.pos = pos
 
+        self.positions = set()
         self.children = OrderedSet()
         self.parents = OrderedSet()
-        self.positions = set()
 
     def detach(self):
         """Detach block from parents and children."""
-        for child in self.children:
-            child.parents.remove(self)
+        self.detach_parents()
+        self.detach_children()
+
+    def detach_parents(self):
         for parent in self.parents:
             parent.children.remove(self)
         self.parents.clear()
+
+    def detach_children(self):
+        for child in self.children:
+            child.parents.remove(self)
         self.children.clear()
 
-    def add_child(self, block):
-        self.children.add(block)
-        block.parents.add(self)
+    def add_parents(self, *parents):
+        for parent in parents:
+            self.parents.add(parent)
+            parent.children.add(self)
+
+    def add_children(self, *children):
+        for child in children:
+            self.children.add(child)
+            child.parents.add(self)
 
     def reparent(self, new_block):
         """
@@ -57,7 +69,7 @@ class BasicBlock(object):
         """
         for child in self.children:
             child.parents.remove(self)
-            new_block.add_child(child)
+            new_block.add_children(child)
 
     def delete(self, flow):
         """

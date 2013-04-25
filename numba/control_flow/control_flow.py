@@ -107,7 +107,7 @@ class ControlFlowAnalysis(expanding.ControlFlowExpander):
 
         # Exit point
         if self.flow.block:
-            self.flow.block.add_child(self.flow.exit_point)
+            self.flow.block.add_children(self.flow.exit_point)
 
         self.flow.add_floating(self.flow.exit_point)
 
@@ -118,7 +118,7 @@ class ControlFlowAnalysis(expanding.ControlFlowExpander):
 
         if self.flow.exceptions:
             exc_descr = self.flow.exceptions[-1]
-            self.flow.block.add_child(exc_descr.entry_point)
+            self.flow.block.add_children(exc_descr.entry_point)
             self.flow.nextblock()
 
         if not rhs:
@@ -139,7 +139,7 @@ class ControlFlowAnalysis(expanding.ControlFlowExpander):
 
         if self.flow.exceptions:
             exc_descr = self.flow.exceptions[-1]
-            self.flow.block.add_child(exc_descr.entry_point)
+            self.flow.block.add_children(exc_descr.entry_point)
             self.flow.nextblock()
 
         return lhs, name_assignment

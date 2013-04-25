@@ -9,6 +9,8 @@ from __future__ import print_function, division, absolute_import
 import collections
 
 from llvmpy.api import llvm
+
+from numba.control_flow import basicblocks
 from numba.experimental import llvm_passes, llvm_types, llvm_utils, llvm_const
 from numba.experimental.llvm_utils import llvm_context
 
@@ -42,20 +44,19 @@ class FunctionGraph(object):
     def __repr__(self):
         return "FunctionGraph(%s)" % self.blocks
 
-class Block(object):
+class Block(basicblocks.BasicBlock):
 
-    def __init__(self, func_graph, name):
-        self.func = func_graph
-        self.name = name
-        self.predecessors = []
-        self.successors = []
+    def __init__(self, id, label, pos):
+        super(Block, self).__init__(id, label, pos)
+
+        self.funcgraph = None   # FunctionGraph that owns us
 
         # [Variable]
         self.instrs = []
 
     def add_parent(self, parent):
-        self.predecessors.append(parent)
-        parent.successors.append(self)
+        self.parents.add(parent)
+        parent.children.add(self)
 
     def __iter__(self):
         return iter(self.instrs)
@@ -67,7 +68,7 @@ class Block(object):
         self.instrs.extend(instrs)
 
     def __repr__(self):
-        return "Block(%s, %s)" % (self.name, self.instrs)
+        return "Block(%s, %s, %s)" % (self.id, self.label, self.instrs)
 
 # ______________________________________________________________________
 
@@ -83,11 +84,11 @@ class OperationBuilder(object):
 
         self.block_temper = make_temper()
 
-    def add_block(self, parents, name="block"):
+    def add_block(self, parents, name="block", pos=None):
         name = self.block_temper(name)
-        block = self.Block(self.funcgraph, name)
-
+        block = self.Block(len(self.funcgraph.blocks), name, pos)
         block.funcgraph = self.funcgraph
+
         self.funcgraph.blocks.append(block)
 
         for parent in parents:
@@ -438,19 +439,19 @@ class LLVMMapper(object):
 
         # Allocate blocks
         for block in blocks:
-            self.llvm_blocks[block] = self.builder.add_block(block.name)
+            self.llvm_blocks[block] = self.builder.add_block(block.label)
 
         # Generete abstract IR
         for block in blocks:
-            # print("block", block.name, len(block.successors))
+            # print("block", block.label, len(block.children))
             self.builder.builder.SetInsertPoint(self.llvm_blocks[block])
 
             for var in block.instrs[:-1]:
                 self.process_op(var)
 
-            if len(block.successors) == 1:
+            if len(block.children) == 1:
                 if block.instrs: self.process_op(block.instrs[-1])
-                succ, = block.successors
+                succ, = block.children
                 self.builder.builder.CreateBr(self.llvm_blocks[succ])
             elif block.instrs:
                 self.terminate_block(block)
@@ -471,11 +472,11 @@ class LLVMMapper(object):
 
         assert self.opctx.is_terminator(op), op
         assert self.opctx.is_conditional_branch(op)
-        assert len(block.successors) == 2
+        assert len(block.children) == 2
 
         cond = self.opctx.get_condition(op)
         lcond = self.llvm_values[cond]
 
-        succ1, succ2 = block.successors
+        succ1, succ2 = block.children
         self.builder.builder.CreateCondBr(
             lcond, self.llvm_blocks[succ1], self.llvm_blocks[succ2])

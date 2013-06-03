@@ -14,6 +14,9 @@ numba/ir/normalized
 numba/ir/typed
 numba/ir/untyped
 numba/pyconsts.c
+deps/__init__.py
+deps/pyextensibletype/__init__.py
+numba/pyextensibletype/
 intern.c
 methodtable.c
 

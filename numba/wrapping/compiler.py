@@ -3,7 +3,6 @@ import inspect
 from numba import typesystem
 import numba.pipeline
 from numba.exttypes import virtual
-from numba.exttypes import signatures
 import numba.exttypes.entrypoints
 
 import numba.decorators
@@ -32,7 +31,7 @@ def resolve_argtypes(env, py_func, template_signature,
 
     return_type = None
     argnames = inspect.getargspec(py_func).args
-    argtypes = [env.context.typemapper.from_python(x) for x in args]
+    argtypes = [typesystem.numba_typesystem.typeof(x) for x in args]
 
     if template_signature is not None:
         template_context, signature = typesystem.resolve_templates(
@@ -88,7 +87,8 @@ class ClassCompiler(Compiler):
 
     def resolve_argtypes(self, args, kwargs):
         assert not kwargs
-        argtypes = map(self.env.context.typemapper.from_python, args)
+        # argtypes = map(self.env.crnt.typesystem.typeof, args)
+        argtypes = map(numba.typeof, args) # TODO: allow registering a type system and using it here
         signature = typesystem.function(None, argtypes)
         return signature
 
@@ -101,38 +101,6 @@ class ClassCompiler(Compiler):
 # Autojit Method Compiler
 #------------------------------------------------------------------------
 
-def autojit_method_compiler(env, extclass, method, signature):
-    """
-    Called to compile a new specialized method. The result should be
-    added to the perfect hash-based vtable.
-    """
-    # compiled_method = numba.jit(argtypes=argtypes)(method.py_func)
-    func_env = numba.pipeline.compile2(env, method.py_func,
-                                       restype=signature.return_type,
-                                       argtypes=signature.args)
-
-    # Create Method for the specialization
-    new_method = signatures.Method(
-        method.py_func,
-        method.name,
-        func_env.func_signature,
-        is_class=method.is_class,
-        is_static=method.is_static)
-
-    new_method.update_from_env(func_env)
-
-    # Update vtable type
-    vtable_wrapper = extclass.__numba_vtab
-    vtable_type = extclass.exttype.vtab_type
-    vtable_type.specialized_methods[new_method.name,
-                                    signature.args] = new_method
-
-    # Replace vtable (which will update the vtable all (live) objects use)
-    new_vtable = virtual.build_hashing_vtab(vtable_type)
-    vtable_wrapper.replace_vtable(new_vtable)
-
-    return func_env.numba_wrapper_func
-
 class MethodCompiler(Compiler):
 
     def __init__(self, env, extclass, method, flags=None):
@@ -143,5 +111,6 @@ class MethodCompiler(Compiler):
         self.method = method
 
     def compile(self, signature):
+        from numba.exttypes.autojitclass import autojit_method_compiler
         return autojit_method_compiler(
             self.env, self.extclass, self.method, signature)

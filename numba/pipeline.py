@@ -5,6 +5,7 @@ define the transformations and the order in which they run on the AST.
 """
 from __future__ import print_function, division, absolute_import
 
+import os
 import ast as ast_module
 import logging
 import pprint
@@ -22,6 +23,9 @@ from numba import optimize
 from numba import closures
 from numba import reporting
 from numba import normalize
+from numba import validate
+from numba.viz import cfgviz
+from numba import typesystem
 from numba.codegen import llvmwrapper
 from numba import ast_constant_folding as constant_folding
 from numba.control_flow import ssa
@@ -30,7 +34,6 @@ from numba import utils
 from numba.missing import FixMissingLocations
 from numba.type_inference import infer as type_inference
 from numba.asdl import schema
-from numba.minivect import minitypes
 import numba.visitors
 
 from numba.specialize import comparisons
@@ -76,6 +79,7 @@ def run_pipeline2(env, func, func_ast, func_signature,
     assert pipeline is None
     assert kwargs.get('order', None) is None
     logger.debug(pprint.pformat(kwargs))
+    kwargs['llvm_module'] = lc.Module.new(module_name(func))
     with env.TranslationContext(env, func, func_ast, func_signature,
                                 **kwargs) as func_env:
         pipeline = env.get_pipeline(kwargs.get('pipeline_name', None))
@@ -95,13 +99,12 @@ def run_env(env, func_env, **kwargs):
 
 def _infer_types2(env, func, restype=None, argtypes=None, **kwargs):
     ast = functions._get_ast(func)
-    func_signature = minitypes.FunctionType(return_type=restype,
-                                            args=argtypes)
+    func_signature = typesystem.function(restype, argtypes)
     return run_pipeline2(env, func, ast, func_signature, **kwargs)
 
 def infer_types2(env, func, restype=None, argtypes=None, **kwargs):
     """
-    Like run_pipeline, but takes restype and argtypes instead of a FunctionType
+    Like run_pipeline, but takes restype and argtypes instead of a function
     """
     pipeline, (sig, symtab, ast) = _infer_types2(
         env, func, restype, argtypes, pipeline_name='type_infer', **kwargs)
@@ -123,8 +126,7 @@ def compile2(env, func, restype=None, argtypes=None, ctypes=False,
     kwds['llvm_module'] = lc.Module.new(module_name(func))
     logger.debug(kwds)
     func_ast = functions._get_ast(func)
-    func_signature = minitypes.FunctionType(return_type=restype,
-                                            args=argtypes)
+    func_signature = typesystem.function(restype, argtypes)
     #pipeline, (func_signature, symtab, ast) = _infer_types2(
     #            env, func, restype, argtypes, codegen=True, **kwds)
     with env.TranslationContext(env, func, func_ast, func_signature,
@@ -189,7 +191,7 @@ class PipelineStage(object):
                 if func_env.is_closure:
                     flags, parent_func_env = env.translation.stack[-2]
                     error_env.merge_in(parent_func_env.error_env)
-                else:
+                elif not e.has_report:
                     reporting.report(env, exc=e)
                 raise
 
@@ -229,11 +231,9 @@ def resolve_templates(ast, env):
         argnames = [name.id for name in ast.args.args]
         argtypes = list(crnt.func_signature.args)
 
-        typesystem.resolve_templates(crnt.locals, crnt.template_signature,
-                                     argnames, argtypes)
-        crnt.func_signature = minitypes.FunctionType(
-            return_type=crnt.func_signature.return_type,
-            args=tuple(argtypes))
+        template_context, signature = typesystem.resolve_templates(
+            crnt.locals, crnt.template_signature, argnames, argtypes)
+        crnt.func_signature = signature
 
     return ast
 
@@ -258,7 +258,6 @@ def update_signature(tree, env):
         # signatures taking a pointer argument to a complex number
         # or struct
         func_signature = func_signature.return_type(*func_signature.args)
-        func_signature.struct_by_reference = True
         func_env.func_signature = func_signature
 
     return tree
@@ -306,11 +305,34 @@ def create_lfunc3(tree, env):
     create_lfunc(tree, env)
     return tree
 
+# ______________________________________________________________________
+
+def dump_ast(ast, env):
+    # astviz.render_ast(ast, os.path.expanduser("~/ast.dot"))
+    return ast
+
+def dump_cfg(ast, env):
+    # dotfile = env.crnt.cfdirectives['control_flow.dot_output']
+    # cfgviz.render_cfg(env.crnt.cfg, dotfile)
+    # for block in env.crnt.cfg.blocks:
+    #     print(block)
+    #     print("    ", block.parents)
+    #     print("    ", block.children)
+    return ast
+
+# ______________________________________________________________________
+
+class ValidateASTStage(PipelineStage):
+    def transform(self, ast, env):
+        validate.ValidateAST().visit(ast)
+        return ast
 
 class NormalizeASTStage(PipelineStage):
     def transform(self, ast, env):
         transform = self.make_specializer(normalize.NormalizeAST, ast, env)
         return transform.visit(ast)
+
+# ______________________________________________________________________
 
 class ControlFlowAnalysis(PipelineStage):
     _pre_condition_schema = None
@@ -331,14 +353,7 @@ class ControlFlowAnalysis(PipelineStage):
         ast = transform.visit(ast)
         env.translation.crnt.symtab = transform.symtab
         ast.flow = transform.flow
-        env.translation.crnt.ast.cfg_transform = transform
         return ast
-
-
-def dump_cfg(ast, env):
-    if env.translation.crnt.cfg_transform.graphviz:
-        env.translation.crnt.cfg_transform.render_gv(ast)
-    return ast
 
 
 class ConstFolding(PipelineStage):
@@ -504,6 +519,15 @@ class CodeGen(PipelineStage):
         func_env.lfunc = func_env.translator.lfunc
         return ast
 
+class PostPass(PipelineStage):
+    def transform(self, ast, env):
+        for postpass_name, postpass in env.crnt.postpasses.iteritems():
+            env.crnt.lfunc = postpass(env,
+                                      env.llvm_context.execution_engine,
+                                      env.crnt.llvm_module,
+                                      env.crnt.lfunc)
+        return ast
+
 class LinkingStage(PipelineStage):
     """
     Link the resulting LLVM function into the global fat module.
@@ -517,12 +541,14 @@ class LinkingStage(PipelineStage):
         # env.context.cbuilder_library.link(func_env.lfunc.module)
         env.constants_manager.link(func_env.lfunc.module)
 
+        lfunc_pointer = 0
         if func_env.link:
             # Link function into fat LLVM module
             func_env.lfunc = env.llvm_context.link(func_env.lfunc)
             func_env.translator.lfunc = func_env.lfunc
+            lfunc_pointer = func_env.translator.lfunc_pointer
 
-        func_env.lfunc_pointer = func_env.translator.lfunc_pointer
+        func_env.lfunc_pointer = lfunc_pointer
 
         return ast
 
@@ -544,6 +570,9 @@ class WrapperStage(PipelineStage):
                 llvmwrapper.build_wrapper_function(env))
             func_env.numba_wrapper_func = numbawrapper
             func_env.llvm_wrapper_func = lfuncwrapper
+
+            # Set pointer to function for external code and numba.addressof()
+            numbawrapper.lfunc_pointer = func_env.lfunc_pointer
 
         return ast
 

@@ -9,7 +9,6 @@ from numba import nodes
 from numba import function_util
 from numba.exttypes import virtual
 from numba.traits import traits, Delegate
-from numba.typesystem import is_obj, promote_closest, promote_to_native
 
 class ExtensionTypeLowerer(visitors.NumbaTransformer):
     """
@@ -17,9 +16,10 @@ class ExtensionTypeLowerer(visitors.NumbaTransformer):
     """
 
     def get_handler(self, ext_type):
-        if ext_type.is_jit_extension:
+        if ext_type.is_extension and not ext_type.is_autojit_exttype:
             return StaticExtensionHandler()
         else:
+            assert ext_type.is_autojit_exttype, ext_type
             return DynamicExtensionHandler()
 
     # ______________________________________________________________________
@@ -57,7 +57,6 @@ class ExtensionTypeLowerer(visitors.NumbaTransformer):
 
         handler = self.get_handler(node.ext_type)
         return handler.handle_method_call(self.env, node, call_node)
-
 
 #------------------------------------------------------------------------
 # Handle Static VTable Attributes and Methods
@@ -134,9 +133,6 @@ class StaticExtensionHandler(object):
 # Handle Dynamic VTable Attributes and Methods
 #------------------------------------------------------------------------
 
-def call_jit(jit_func, args):
-    return nodes.NativeCallNode(jit_func.signature, args, jit_func.lfunc)
-
 @traits
 class DynamicExtensionHandler(object):
     """
@@ -163,13 +159,11 @@ class DynamicExtensionHandler(object):
         However, we could *preload* (**vtab_slot), where function calls
         invalidate the preload, if we were so inclined.
         """
-        from numba.utility import virtuallookup
-
         # Make the object we call the method on clone-able
         node.value = nodes.CloneableNode(node.value)
 
         ext_type = node.ext_type
-        func_signature = node.type
+        func_signature = node.type #typesystem.extmethod_to_function(node.type)
         offset = ext_type.vtab_offset
 
         # __________________________________________________________________
@@ -182,7 +176,7 @@ class DynamicExtensionHandler(object):
         # __________________________________________________________________
         # Calculate pre-hash
 
-        prehash = virtual.hash_signature(func_signature)
+        prehash = virtual.hash_signature(func_signature, func_signature.name)
         prehash_node = nodes.ConstNode(prehash, uint64)
 
         # __________________________________________________________________
@@ -191,16 +185,12 @@ class DynamicExtensionHandler(object):
         # A method is always present when it was given a static signature,
         # e.g. @double(double)
         always_present = node.attr in ext_type.vtab_type.methodnames
-
         args = [vtab_struct_pp, prehash_node]
 
-        if always_present:
-            lookup = virtuallookup.lookup_method
-        else:
-            lookup = virtuallookup.lookup_and_assert_method
-            args.append(nodes.const(node.attr, c_string_type))
-
-        vmethod = call_jit(lookup, args).coerce(func_signature.pointer())
+        # lookup_impl = NumbaVirtualLookup()
+        lookup_impl = DebugVirtualLookup()
+        ptr = lookup_impl.lookup(env, always_present, node, args)
+        vmethod = ptr.coerce(func_signature.pointer())
         vmethod = vmethod.cloneable
 
         # __________________________________________________________________
@@ -214,20 +204,66 @@ class DynamicExtensionHandler(object):
         # __________________________________________________________________
         # Generate fallback
 
-        if not always_present and False:
-            # TODO: Enable this path and generate a phi for the result
-            # Generate object call
-            obj_args = [nodes.CoercionNode(arg, object_) for arg in args]
-            obj_args.append(nodes.NULL)
-            object_call = function_util.external_call(
-                env.context, env.crnt.llvm_module,
-                'PyObject_CallMethodObjArgs', obj_args)
-
-            # if vmethod != NULL: vmethod(obj, ...)
-            # else: obj.method(...)
-            method_call = nodes.if_else(
-                ast.NotEq(),
-                vmethod.clone, nodes.NULL,
-                lhs=method_call, rhs=object_call)
+        # TODO: Subclassing!
+        # if not always_present:
+        #     # TODO: Enable this path and generate a phi for the result
+        #     # Generate object call
+        #     obj_args = [nodes.CoercionNode(arg, object_) for arg in args]
+        #     obj_args.append(nodes.NULL)
+        #     object_call = function_util.external_call(
+        #         env.context, env.crnt.llvm_module,
+        #         'PyObject_CallMethodObjArgs', obj_args)
+        #
+        #     # if vmethod != NULL: vmethod(obj, ...)
+        #     # else: obj.method(...)
+        #     method_call = nodes.if_else(
+        #         ast.NotEq(),
+        #         vmethod.clone, nodes.NULL,
+        #         lhs=method_call, rhs=object_call)
 
         return method_call
+
+#------------------------------------------------------------------------
+# Method lookup
+#------------------------------------------------------------------------
+
+def call_jit(jit_func, args):
+    return nodes.NativeCallNode(jit_func.signature, args, jit_func.lfunc)
+
+class NumbaVirtualLookup(object):
+    """
+    Use a numba function from numba.utility.virtuallookup to look up virtual
+    methods in a hash table.
+    """
+
+    def lookup(self, env, always_present, node, args):
+        """
+        :param node: ExtensionMethodNode
+        :param args: [vtable_node, prehash_node]
+        :return: The virtual method as a Node
+        """
+        from numba.utility import virtuallookup
+
+        if always_present and False:
+            lookup = virtuallookup.lookup_method
+        else:
+            lookup = virtuallookup.lookup_and_assert_method
+            args.append(nodes.const(node.attr, c_string_type))
+
+        vmethod = call_jit(lookup, args)
+        return vmethod
+
+class DebugVirtualLookup(object):
+    """
+    Use a C utility function from numba/utility/utilities/virtuallookup.c
+    to look up virtual methods in a hash table.
+
+    Use for debugging.
+    """
+
+    def lookup(self, env, always_present, node, args):
+        args.append(nodes.const(node.attr, c_string_type))
+        vmethod = function_util.utility_call(
+            env.context, env.crnt.llvm_module,
+            "lookup_method", args)
+        return vmethod

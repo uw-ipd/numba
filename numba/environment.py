@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import print_function, division, absolute_import
+
+import os
 import weakref
 import ast as ast_module
 import types
@@ -9,12 +11,12 @@ import pprint
 import llvm.core
 
 from numba import pipeline, naming, error, reporting, PY3
-from numba.control_flow.control_flow import ControlFlow
 from numba.utils import TypedProperty, WriteOnceTypedProperty, NumbaContext
-from numba.minivect.minitypes import FunctionType
 from numba import functions, symtab
+from numba.typesystem import TypeSystem, numba_typesystem, function
 from numba.utility.cbuilder import library
 from numba.nodes import metadata
+from numba.control_flow import ControlFlow
 from numba.codegen import translate
 from numba.codegen import globalconstants
 
@@ -34,20 +36,25 @@ else:
     NoneType = types.NoneType
     name_types = (str, unicode)
 
-default_pipeline_order = [
+default_normalize_order = [
     'ast3to2',
     'resolve_templates',
     'validate_signature',
     'update_signature',
     'create_lfunc1',
+    'ValidateASTStage',
     'NormalizeASTStage',
+]
+
+default_pipeline_order = default_normalize_order + [
     'ControlFlowAnalysis',
+    'dump_cfg',
     #'ConstFolding',
+    # 'dump_ast',
     'TypeInfer',
     'update_signature',
     'create_lfunc2',
     'TypeSet',
-    'dump_cfg',
     'ClosureTypeInference',
     'create_lfunc3',
     'TransformFor',
@@ -66,20 +73,23 @@ default_pipeline_order = [
     'SpecializeExceptions',
     'FixASTLocations',
     'cleanup_symtab',
+    # 'dump_ast',
     'CodeGen',
+    'PostPass',
     'LinkingStage',
     'WrapperStage',
     'ErrorReporting',
 ]
 
-default_type_infer_pipeline_order = [
+default_cf_pipeline_order = [
     'ast3to2',
     'ControlFlowAnalysis',
-    'TypeInfer',
 ]
 
-compile_idx = default_pipeline_order.index('TypeInfer') + 1
-default_compile_pipeline_order = default_pipeline_order[compile_idx:]
+default_type_infer_pipeline_order = default_cf_pipeline_order + [
+    'resolve_templates',
+    'TypeInfer',
+]
 
 default_dummy_type_infer_pipeline_order = [
     'ast3to2',
@@ -101,6 +111,13 @@ default_numba_late_translate_pipeline_order = \
     default_numba_lower_pipeline_order + [
     'CodeGen',
 ]
+
+upto = lambda order, x: order[:order.index(x)+1]
+upfr = lambda order, x: order[order.index(x)+1:]
+
+default_compile_pipeline_order = upfr(default_pipeline_order, 'TypeInfer')
+default_codegen_pipeline = upto(default_pipeline_order, 'CodeGen')
+default_post_codegen_pipeline = upfr(default_pipeline_order, 'CodeGen')
 
 # ______________________________________________________________________
 # Convenience functions
@@ -143,7 +160,7 @@ class FunctionErrorEnvironment(object):
     enable_post_mortem = TypedProperty(
         bool,
         "Enable post-mortem debugging for the Numba compiler",
-        False|1
+        False
     )
 
     collection = TypedProperty(
@@ -193,7 +210,7 @@ class FunctionEnvironment(object):
         'Abstract syntax tree for the function being translated.')
 
     func_signature = TypedProperty(
-        FunctionType,
+        function,
         'Type signature for the function being translated.')
 
     is_partial = TypedProperty(
@@ -202,6 +219,7 @@ class FunctionEnvironment(object):
         False)
 
     func_name = TypedProperty(str, 'Target function name.')
+    module_name = TypedProperty(str, 'Name of the function module.')
 
     mangled_name = TypedProperty(str, 'Mangled name of compiled function.')
 
@@ -269,14 +287,17 @@ class FunctionEnvironment(object):
         '({ "local_var_name" : local_var_type } for @autojit(locals=...))')
 
     template_signature = TypedProperty(
-        object, # FIXME
+        (function, NoneType),
         'Template signature for @autojit.  E.g. T(T[:, :]).  See '
         'numba.typesystem.templatetypes.')
+
+    typesystem = TypedProperty(TypeSystem, "Typesystem for this compilation")
 
     ast_metadata = TypedProperty(
         object,
         'Metadata for AST nodes of the function being compiled.')
 
+    warn = True
     flow = TypedProperty(
         (NoneType, ControlFlow),
         "Control flow graph. See numba.control_flow.",
@@ -288,6 +309,18 @@ class FunctionEnvironment(object):
         object, # Should be ControlFlowAnalysis.
         'The Control Flow Analysis transform object '
         '(control_flow.ControlFlowAnalysis). Set during the cfg pass.')
+    cfdirectives = TypedProperty(
+        dict, "Directives for control flow.",
+        default={
+            'warn.maybe_uninitialized': warn,
+            'warn.unused_result': False,
+            'warn.unused': warn,
+            'warn.unused_arg': warn,
+            # Set the below flag to a path to generate CFG dot files
+            'control_flow.dot_output': os.path.expanduser("~/cfg.dot"),
+            'control_flow.dot_annotate_defs': False,
+        },
+    )
 
     # FIXME: Get rid of this property; pipeline stages are users and
     # transformers of the environment.  Any state needed beyond a
@@ -334,6 +367,11 @@ class FunctionEnvironment(object):
         default='fancy'
     )
 
+    postpasses = TypedProperty(
+        dict,
+        "List of passes that should run on the final llvm ir before linking",
+    )
+
     kwargs = TypedProperty(
         dict,
         'Additional keyword arguments.  Deprecated, but kept for backward '
@@ -351,10 +389,11 @@ class FunctionEnvironment(object):
              llvm_module=None, wrap=True, link=True,
              symtab=None,
              error_env=None, function_globals=None, locals=None,
-             template_signature=None, cfg_transform=None,
-             is_closure=False, closures=None, closure_scope=None,
+             template_signature=None, is_closure=False,
+             closures=None, closure_scope=None,
              refcount_args=True,
              ast_metadata=None, warn=True, warnstyle='fancy',
+             typesystem=None, postpasses=None,
              **kws):
 
         self.parent = parent
@@ -374,6 +413,16 @@ class FunctionEnvironment(object):
         else:
             qname = name
 
+        if function_globals is not None:
+            self.function_globals = function_globals
+        else:
+            self.function_globals = self.func.__globals__
+
+        if self.func:
+            self.module_name = self.func.__module__
+        else:
+            self.module_name = self.function_globals.get("__name__", "")
+
         if mangled_name is None:
             mangled_name = naming.specialized_mangle(qname,
                                                      self.func_signature.args)
@@ -383,6 +432,7 @@ class FunctionEnvironment(object):
         self.qualified_name = qualified_name or name
         self.llvm_module = (llvm_module if llvm_module
                                  else self.numba.llvm_context.module)
+
         self.wrap = wrap
         self.link = link
         self.llvm_wrapper_func = None
@@ -392,19 +442,18 @@ class FunctionEnvironment(object):
                                                                self.ast,
                                                                warnstyle)
 
-        if function_globals is not None:
-            self.function_globals = function_globals
-        else:
-            self.function_globals = self.func.__globals__
 
         self.locals = locals if locals is not None else {}
         self.template_signature = template_signature
-        self.cfg_transform = cfg_transform
         self.is_closure = is_closure
         self.closures = closures if closures is not None else {}
         self.closure_scope = closure_scope
 
         self.refcount_args = refcount_args
+        self.typesystem = typesystem or numba_typesystem
+
+        import numba.postpasses
+        self.postpasses = postpasses or numba.postpasses.default_postpasses
 
         if ast_metadata is not None:
             self.ast_metadata = ast_metadata
@@ -431,12 +480,12 @@ class FunctionEnvironment(object):
             function_globals=self.function_globals,
             locals=self.locals,
             template_signature=self.template_signature,
-            cfg_transform=self.cfg_transform,
             is_closure=self.is_closure,
             closures=self.closures,
             closure_scope=self.closure_scope,
             warn=self.warn,
             warnstyle=self.warnstyle,
+            postpasses=self.postpasses,
         )
         return state
 
@@ -743,6 +792,10 @@ class NumbaEnvironment(_AbstractNumbaEnvironment):
             default_pipeline_order)
         self.pipelines = {
             self.default_pipeline : actual_default_pipeline,
+            'normalize' : pipeline.ComposedPipelineStage(
+                default_normalize_order),
+            'cf' : pipeline.ComposedPipelineStage(
+                default_cf_pipeline_order),
             'type_infer' : pipeline.ComposedPipelineStage(
                 default_type_infer_pipeline_order),
             'dummy_type_infer' : pipeline.ComposedPipelineStage(
@@ -755,6 +808,10 @@ class NumbaEnvironment(_AbstractNumbaEnvironment):
                 default_numba_lower_pipeline_order),
             'late_translate' : pipeline.ComposedPipelineStage(
                 default_numba_late_translate_pipeline_order),
+            'codegen' : pipeline.ComposedPipelineStage(
+                default_codegen_pipeline),
+            'post_codegen' : pipeline.ComposedPipelineStage(
+                default_post_codegen_pipeline),
             }
         self.context = NumbaContext()
         self.specializations = functions.FunctionCache(env=self)

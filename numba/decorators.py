@@ -2,7 +2,8 @@
 from __future__ import print_function, division, absolute_import
 
 from numba.exttypes.entrypoints import  (jit_extension_class,
-                                         autojit_extension_class)
+                                         autojit_extension_class,
+                                         autojit_class_wrapper)
 
 __all__ = ['autojit', 'jit', 'export', 'exportmany']
 
@@ -13,7 +14,6 @@ import inspect
 from numba import *
 from numba import typesystem, numbawrapper
 from numba import  functions
-from .minivect import minitypes
 from numba.utils import  process_signature
 from numba.codegen import llvmwrapper
 from numba import environment
@@ -152,14 +152,16 @@ def _autojit(template_signature, target, nopython, env_name=None, env=None,
 
         if isinstance(f, CLASS_TYPES):
             compiler_cls = compiler.ClassCompiler
+            wrapper = autojit_class_wrapper
         else:
             compiler_cls = compiler.FunctionCompiler
+            wrapper = autojit_wrappers[(target, 'ast')]
 
         env.specializations.register(f)
         cache = env.specializations.get_autojit_cache(f)
 
+        flags['target'] = target
         compilerimpl = compiler_cls(env, f, nopython, flags, template_signature)
-        wrapper = autojit_wrappers[(target, 'ast')]
         numba_func = wrapper(f, compilerimpl, cache)
 
         return numba_func
@@ -174,7 +176,7 @@ def autojit(template_signature=None, backend='ast', target='cpu',
     function exists for a set of input argument types, the dispatcher
     creates and caches a new specialized function at call time.
     """
-    if template_signature and not isinstance(template_signature, minitypes.Type):
+    if template_signature and not isinstance(template_signature, typesystem.Type):
         if callable(template_signature):
             func = template_signature
             return autojit(backend='ast', target=target,
@@ -200,16 +202,24 @@ def _jit(restype=None, argtypes=None, nopython=False,
             return jit_extension_class(cls, kwargs, env)
 
         argtys = argtypes
-        if func.__code__.co_argcount == 0 and argtys is None:
+        if argtys is None and restype:
+            assert restype.is_function
+            return_type = restype.return_type
+            argtys = restype.args
+        elif argtys is None:
+            assert func.__code__.co_argcount == 0, func
+            return_type = None
             argtys = []
+        else:
+            return_type = restype
 
         assert argtys is not None
         env.specializations.register(func)
 
         assert kwargs.get('llvm_module') is None # TODO link to user module
         assert kwargs.get('llvm_ee') is None, "Engine should never be provided"
-        sig, lfunc, wrapper = compile_function(env, func, argtys, restype=restype,
-                                    nopython=nopython, **kwargs)
+        sig, lfunc, wrapper = compile_function(
+            env, func, argtys, restype=return_type, nopython=nopython, **kwargs)
         return numbawrapper.create_numba_wrapper(func, wrapper, sig, lfunc)
 
     return _jit_decorator
@@ -260,7 +270,7 @@ def jit(restype=None, argtypes=None, backend='ast', target='cpu', nopython=False
         return jit_extension_class(cls, kws, env)
 
     # Called with f8(f8) syntax which returns a dictionary of argtypes and restype
-    if isinstance(restype, minitypes.FunctionType):
+    if isinstance(restype, typesystem.function):
         if argtypes is not None:
             raise TypeError("Cannot use both calling syntax and argtypes keyword")
         argtypes = restype.args

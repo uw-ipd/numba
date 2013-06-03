@@ -65,10 +65,9 @@ from numba import numbawrapper
 from numba.exttypes import extension_types
 from numba import utils
 from numba.type_inference import module_type_inference
-from numba.minivect import  minitypes
 from numba.symtab import Variable
-from numba.exttypes import methodtable
 from numba.exttypes import attributetable
+
 logger = logging.getLogger(__name__)
 #logger.setLevel(logging.DEBUG)
 
@@ -94,7 +93,7 @@ def err_decorator(decorator):
                        "are supported")
 
 def check_valid_argtype(argtype_node, argtype):
-    if not isinstance(argtype, minitypes.Type):
+    if not isinstance(argtype, typesystem.Type):
         raise error.NumbaError(argtype_node, "Invalid type: %r" % (argtype,))
 
 def assert_constant(visit_func, decorator, result_node):
@@ -151,14 +150,12 @@ def handle_jit_decorator(visit_func, func_def, decorator):
             signature = restype
         else:
             argtypes = parse_argtypes(visit_func, decorator, func_def, jit_args)
-            signature = minitypes.FunctionType(restype, argtypes,
-                                               name=func_def.name)
+            signature = typesystem.function(restype, argtypes,
+                                            name=func_def.name)
     else: #elif func_def.args:
         raise error.NumbaError(decorator,
                                "The argument types and return type "
                                "need to be specified")
-    #else:
-    #    signature = minitypes.FunctionType(None, [])
 
     # TODO: Analyse closure at call or outer function return time to
     # TODO:     infer return type
@@ -328,7 +325,7 @@ class ClosureTypeInferer(ClosureTransformer):
                                                          attributes=fields)
 
         ext_type = extension_types.create_new_extension_type(
-                func_name , (object,), {}, scope_type, None)
+                type, func_name , (object,), {}, scope_type, None)
 
         # Instantiate closure scope
         logger.debug("Generate closure %s %s %s", node.name, scope_type,

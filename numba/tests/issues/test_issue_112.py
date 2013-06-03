@@ -1,8 +1,11 @@
+# -*- coding: utf-8 -*-
+from __future__ import print_function, division, absolute_import
+
 import numpy as np
 
 from numba import autojit, register_callable, npy_intp, typesystem
 
-restype = typesystem.TupleType(npy_intp[:, :], 2)
+restype = typesystem.tuple_(npy_intp[:, :], 2)
 
 @register_callable(restype(npy_intp[:], npy_intp[:]))
 def meshgrid(x, y):

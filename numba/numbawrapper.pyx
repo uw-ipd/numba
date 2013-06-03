@@ -7,7 +7,7 @@ import ctypes
 
 import numba
 from numba import error
-from numba.minivect import minitypes
+from numba.typesystem import itypesystem
 from numba.support import ctypes_support, cffi_support
 
 import numpy as np
@@ -78,7 +78,7 @@ if cffi_support.ffi is not None:
     support_classes += (cffi_support.cffi_func_type,)
 
 cdef tuple hash_on_value_types = (
-    minitypes.Type,
+    itypesystem.Type,
     np.ufunc,
     np.dtype,
     np.generic,
@@ -103,7 +103,7 @@ cdef class NumbaCompiledWrapper(NumbaWrapper):
     """
     Temporary numba wrapper function for @jit, only used for recursion.
 
-        signature: minitype FunctionType signature
+        signature: minitype function signature
         lfunc: LLVM function
     """
 
@@ -147,7 +147,8 @@ def is_numba_wrapper(numbafunction):
 
 cdef class _NumbaSpecializingWrapper(NumbaWrapper):
     """
-    Numba wrapper function for @autojit.
+    Numba wrapper function for @autojit. Specializes py_func when called with
+    new argtypes.
 
         py_func: original Python function
         compiler: numba.wrapper.compiler.Compiler
@@ -202,6 +203,10 @@ cdef class _NumbaSpecializingWrapper(NumbaWrapper):
 
 
 class NumbaSpecializingWrapper(_NumbaSpecializingWrapper):
+    # Don't make this a docstring, it breaks the __doc__ propertyr
+    # """
+    # Python class to allow overriding properties such as __name__.
+    # """
 
     @property
     def __name__(self):
@@ -219,6 +224,14 @@ class NumbaSpecializingWrapper(_NumbaSpecializingWrapper):
 #------------------------------------------------------------------------
 # Unbound Methods
 #------------------------------------------------------------------------
+
+def unbound_method_type_check(py_class, obj):
+    if not isinstance(obj, py_class):
+        raise TypeError(
+            "unbound method numba_function_or_method object must be "
+            "called with %s instance as first argument "
+            "(got %s instance instead)" % (py_class.__name__, type(obj).__name__))
+
 
 cdef class UnboundFunctionWrapper(object):
     """
@@ -245,14 +258,7 @@ cdef class UnboundFunctionWrapper(object):
 
     def __call__(self, *args, **kwargs):
         assert len(args) > 0, "Unbound method must have at least one argument"
-
-        if not isinstance(args[0], self.type):
-            raise TypeError(
-                ("unbound method numba_function_or_method object must be "
-                 "called with %s instance as first argument "
-                 "(got %s instance instead)") % (self.type.__name__,
-                                                 type(args[0]).__name__))
-
+        unbound_method_type_check(self.type, args[0])
         return self.func(*args, **kwargs)
 
 
@@ -271,7 +277,7 @@ cdef class BoundSpecializingWrapper(object):
     don't need this, since numbafunction does the binding.
     """
 
-    cdef public object specializing_wrapper, type
+    cdef public object specializing_wrapper, type, instance
 
     def __init__(self, specializing_wrapper, instance):
         self.specializing_wrapper = specializing_wrapper
@@ -279,7 +285,6 @@ cdef class BoundSpecializingWrapper(object):
 
     def __call__(self, *args, **kwargs):
         return self.specializing_wrapper(self.instance, *args, **kwargs)
-
 
 #------------------------------------------------------------------------
 # Autojit Fast Function Cache
@@ -351,7 +356,7 @@ cdef class AutojitFunctionCache(object):
     functions.FunctionCache.
     """
 
-    cdef dict specializations
+    cdef public dict specializations
 
     # list of dtypes that need to be alive in order for the id() hash to
     # remain valid

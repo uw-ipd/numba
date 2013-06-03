@@ -6,9 +6,14 @@ import sys
 import types
 import unittest
 import functools
+try:
+    from nose.tools import nottest
+except ImportError:
+    def nottest(fn):
+        def _nottest(*args, **kws):
+            raise Exception("nose not available")
+        return _nottest
 
-from nose.tools import nottest
-import nose.plugins.skip
 import numba
 from numba import *
 from numba.testing import doctest_support
@@ -26,7 +31,7 @@ if numba.PY3:
         doc = re.sub(r'(\d+)L', r'\1', doc)
         doc = re.sub(r'([^\.])NumbaError', r'\1numba.error.NumbaError', doc)
         doc = re.sub(r'([^\.])InvalidTemplateError', r'\1numba.error.InvalidTemplateError', doc)
-        doc = re.sub(r'([^\.])UnpromotableTypeError', r'\1numba.minivect.minierror.UnpromotableTypeError', doc)
+        doc = re.sub(r'([^\.])UnpromotableTypeError', r'\1numba.error.UnpromotableTypeError', doc)
         return doc
     def autojit_py3doc(*args, **kwargs):
         if kwargs:
@@ -135,7 +140,7 @@ def fix_module_doctest_py3(module):
         except:
             pass
 
-def testmod(module=None, runit=False):
+def testmod(module=None, run=True, optionflags=None,):
     """
     Tests a doctest modules with numba functions. When run in nosetests, only
     populates module.__test__, when run as main, runs the doctests.
@@ -146,11 +151,9 @@ def testmod(module=None, runit=False):
         module = __import__(modname)
         # module = types.ModuleType(modname)
         # vars(module).update(mod_globals)
-    else:
-        modname = module.__name__
 
     fix_module_doctest_py3(module)
-    doctest_support.testmod(module, run_doctests=runit or modname == '__main__')
+    doctest_support.testmod(module, run_doctests=run)
 
 #------------------------------------------------------------------------
 # Test Parametrization

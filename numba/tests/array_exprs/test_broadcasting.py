@@ -118,7 +118,7 @@ def test_shape_mismatch():
     >>> shape_mismatch(a[:2], b)
     Traceback (most recent call last):
         ...
-    ValueError: Shape mismatch while broadcasting
+    ValueError: ...
 
     # This will abort, so don't run it :)
     >> shape_mismatch_nopython(a[:2], b)
@@ -127,4 +127,4 @@ def test_shape_mismatch():
 
 if __name__ == "__main__":
     import numba
-    numba.testmod()
+    numba.testing.testmod()

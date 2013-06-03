@@ -39,10 +39,10 @@ def _create_methoddef(py_func, func_name, func_doc, func_pointer):
          const char  *ml_doc;    /* The __doc__ attribute, or NULL */
     };
     """
-    PyMethodDef = struct([('name', c_string_type),
+    PyMethodDef = struct([('name',   char.pointer()),
                           ('method', void.pointer()),
-                          ('flags', int_),
-                          ('doc', c_string_type)])
+                          ('flags',  int_),
+                          ('doc',    char.pointer())])
     c_PyMethodDef = PyMethodDef.to_ctypes()
 
     PyCFunction_NewEx = ctypes.pythonapi.PyCFunction_NewEx
@@ -274,7 +274,7 @@ def build_wrapper_function(env):
             env.crnt.func,
             env.crnt.func_name,
             env.crnt.func_doc,
-            env.crnt.translator.module_name,
+            env.crnt.module_name,
             func_pointer,                       # Wrapper
             env.crnt.translator.lfunc_pointer,  # Wrapped
             env.crnt.func_signature)

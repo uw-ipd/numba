@@ -207,7 +207,8 @@ cdef class DynamicVtableWrapper(object):
 # Create Extension Type
 #------------------------------------------------------------------------
 
-def create_new_extension_type(name, bases, classdict, exttype, vtable_wrapper):
+def create_new_extension_type(metacls, name, bases, classdict,
+                              exttype, vtable_wrapper):
     """
     Create an extension type from the given name, bases and classdict. Also
     takes a vtab struct minitype, and a attr_struct_type describing the
@@ -255,11 +256,12 @@ def create_new_extension_type(name, bases, classdict, exttype, vtable_wrapper):
     cdef Py_ssize_t vtab_offset, attrs_offset
 
     orig_new = classdict.get('__new__', None)
+    if orig_new:
+        #
+        orig_new = orig_new.__func__ # staticmethod is not callable!
 
     # __________________________________________________________________
     # Extension type constructor
-
-    cdef bint base_is_object = bases == (object,)
 
     def new(cls, *args, **kwds):
         "Create a new object and patch it with a vtab"
@@ -273,7 +275,7 @@ def create_new_extension_type(name, bases, classdict, exttype, vtable_wrapper):
             new_func = super(extclass, cls).__new__
 
         if base_is_object:
-            # Avoid warnings in py2.6:
+            # Avoid warnings in py2.6 and errors in py3.x:
             #     DeprecationWarning: object.__new__() takes no parameters
             obj = new_func(cls)
         else:
@@ -301,8 +303,11 @@ def create_new_extension_type(name, bases, classdict, exttype, vtable_wrapper):
     # Create extension type
 
     classdict['__new__'] = staticmethod(new)
-    extclass = type(name, bases, classdict)
+    extclass = metacls(name, bases, classdict)
     assert isinstance(extclass, type)
+
+    superclass_new = super(extclass, extclass).__new__
+    cdef bint base_is_object = superclass_new.__self__ is object
 
     extclass_p = <PyTypeObject *> extclass
 

@@ -13,9 +13,9 @@ import os
 import sys
 import logging
 
-from numba import utils, typesystem
-
 PY3 = sys.version_info[0] == 3
+
+from numba import utils, typesystem
 
 def get_include():
     numba_root = os.path.dirname(os.path.abspath(__file__))
@@ -61,13 +61,15 @@ _config_logger()
 
 
 from . import special
+from numba.typesystem import template
 from numba.typesystem import *
-from numba.minivect.minitypes import FunctionType
+from numba.typesystem import struct_ as struct # don't export this in __all__
+from numba.typesystem import function
 from numba.error import *
 
 from numba.containers.typedlist import typedlist
 from numba.containers.typedtuple import typedtuple
-from numba.typesystem import map_dtype
+from numba.typesystem.numpy_support import map_dtype
 from numba.type_inference.module_type_inference import (is_registered,
                                                         register,
                                                         register_inferer,
@@ -85,4 +87,6 @@ from numba.intrinsic.numba_intrinsic import (declare_intrinsic,
 __all__ = typesystem.__all__ + decorators.__all__ + special.__all__
 __all__.extend(["numeric", "floating", "complextypes"])
 
-from numba.testing import testmod, test, nose_run
+from numba import testing
+from numba.testing import test, nose_run
+from numba.testing.user_support import testmod

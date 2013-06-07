@@ -16,6 +16,7 @@ numba/ir/untyped
 numba/pyconsts.c
 deps/__init__.py
 deps/pyextensibletype/__init__.py
+docs/source/modules/
 numba/pyextensibletype/
 intern.c
 methodtable.c

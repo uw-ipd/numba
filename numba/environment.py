@@ -7,6 +7,7 @@ import ast as ast_module
 import types
 import logging
 import pprint
+import inspect
 
 import llvm.core
 
@@ -119,6 +120,9 @@ default_compile_pipeline_order = upfr(default_pipeline_order, 'TypeInfer')
 default_codegen_pipeline = upto(default_pipeline_order, 'CodeGen')
 default_post_codegen_pipeline = upfr(default_pipeline_order, 'CodeGen')
 
+default_code_obj_pipeline = (
+)
+
 # ______________________________________________________________________
 # Convenience functions
 
@@ -146,11 +150,11 @@ class FunctionErrorEnvironment(object):
     """
 
     func = WriteOnceTypedProperty(
-        (NoneType, types.FunctionType),
+        (NoneType, types.FunctionType, types.CodeType),
         'Function (or similar) being translated.')
 
     ast = TypedProperty(
-        ast_module.AST,
+        (NoneType, ast_module.AST),
         'Original Abstract Syntax Tree for the function being translated.')
 
     source = TypedProperty(
@@ -206,7 +210,7 @@ class FunctionEnvironment(object):
         object, 'Function (or similar) being translated.')
 
     ast = TypedProperty(
-        ast_module.AST,
+        (NoneType, ast_module.AST),
         'Abstract syntax tree for the function being translated.')
 
     func_signature = TypedProperty(
@@ -402,24 +406,33 @@ class FunctionEnvironment(object):
         self.ast = ast
         self.func_signature = func_signature
 
+        func_is_func = inspect.isfunction(self.func)
+        func_module = getattr(self.func, '__module__', None)
+
         if name is None:
             if self.func:
-                name = self.func.__name__
+                if func_is_func:
+                    name = self.func.__name__
+                else:
+                    name = self.func.co_name
             else:
                 name = self.ast.name
 
-        if self.func and self.func.__module__:
-            qname = '.'.join([self.func.__module__, name])
+        if func_module:
+            qname = '.'.join([func_module, name])
         else:
             qname = name
 
         if function_globals is not None:
             self.function_globals = function_globals
         else:
-            self.function_globals = self.func.__globals__
+            if func_is_func:
+                self.function_globals = self.func.__globals__
+            else:
+                self.function_globals = {}
 
-        if self.func:
-            self.module_name = self.func.__module__
+        if func_module:
+            self.module_name = func_module
         else:
             self.module_name = self.function_globals.get("__name__", "")
 
@@ -506,6 +519,14 @@ class FunctionEnvironment(object):
         else:
             return ast_module.get_docstring(self.ast)
 
+    @property
+    def env_key(self):
+        if self.ast:
+            ret_val = self.ast
+        else:
+            ret_val = self.func
+        return ret_val
+
 # ______________________________________________________________________
 
 class TranslationEnvironment(object):
@@ -576,13 +597,18 @@ class TranslationEnvironment(object):
         self.is_pycc = kws.get('is_pycc', False)
 
     def get_or_make_env(self, func, ast, func_signature, **kwds):
-        if ast not in self.func_envs:
+        if ast is None:
+            # Index by function or code object if there is no AST
+            env_key = func
+        else:
+            env_key = ast
+        if env_key not in self.func_envs:
             kwds.setdefault('warn', self.warn)
             func_env = self.numba.FunctionEnvironment(
                     self, func, ast, func_signature, **kwds)
-            self.func_envs[ast] = func_env
+            self.func_envs[env_key] = func_env
         else:
-            func_env = self.func_envs[ast]
+            func_env = self.func_envs[env_key]
             if func_env.is_partial:
                 state = func_env.partial_state
             else:
@@ -632,7 +658,7 @@ class TranslationEnvironment(object):
         self.crnt = func_env
         self.stack.append((kws, self.crnt))
         self.functions[self.crnt.func_name] = self.crnt
-        self.func_envs[func_env.ast] = func_env
+        self.func_envs[func_env.env_key] = func_env
         if self.numba.debug:
             logger.debug('stack=%s\ncrnt=%r (%r)', pprint.pformat(self.stack),
                          self.crnt, self.crnt.func if self.crnt else None)
@@ -812,6 +838,8 @@ class NumbaEnvironment(_AbstractNumbaEnvironment):
                 default_codegen_pipeline),
             'post_codegen' : pipeline.ComposedPipelineStage(
                 default_post_codegen_pipeline),
+            'code_obj' : pipeline.ComposedPipelineStage(
+                default_code_obj_pipeline)
             }
         self.context = NumbaContext()
         self.specializations = functions.FunctionCache(env=self)

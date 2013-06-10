@@ -21,10 +21,14 @@ def get_ending(args):
         return find_shared_ending()
 
 
-def main(args=None):
+def main(args=None, prog=None):
     import argparse
-    parser = argparse.ArgumentParser(description="Compile Python modules to a single shared library")
-    parser.add_argument("inputs", nargs='+', help="Input file(s)")
+    parser_kwargs = dict(
+        description="Compile Python modules to a single shared library")
+    if prog is not None:
+        parser_kwargs.update(prog=prog)
+    parser = argparse.ArgumentParser(**parser_kwargs)
+    parser.add_argument("input_files", nargs='+', help="Input file(s)")
     parser.add_argument("-o", nargs=1, dest="output",
                         help="Output file  (default is name of first input -- with new ending)")
 
@@ -41,6 +45,9 @@ def main(args=None):
     parser.add_argument('--python', action='store_true',
                         help='Emit additionally generated Python wrapper and '
                         'extension module code in output')
+    parser.add_argument('--exportall', action='store_true',
+                        help='Compile and emit code for all Python constructs '
+                        'in the input module(s) using the Python C API')
     parser.add_argument('-d', '--debug', action='store_true',
                         help='Print extra debug information')
 
@@ -55,25 +62,26 @@ def main(args=None):
         output_base = os.path.split(args.output)[1]
         module_name = os.path.splitext(output_base)[0]
     else:
-        input_base = os.path.splitext(args.inputs[0])[0]
+        input_base = os.path.splitext(args.input_files[0])[0]
         module_name = os.path.split(input_base)[1]
         args.output = input_base + get_ending(args)
     logger.debug('args.output --> %s', args.output)
 
-    logger.debug('inputs --> %s', args.inputs)
-    compiler = Compiler(args.inputs, module_name=module_name)
+    logger.debug('inputs --> %s', args.input_files)
+    compiler = Compiler(args.input_files, module_name=module_name,
+                        **vars(args))
     if args.llvm:
         logger.debug('emit llvm')
-        compiler.write_llvm_bitcode(args.output, wrap=args.python)
+        compiler.write_llvm_bitcode(args.output)
     elif args.olibs:
         logger.debug('emit object file')
-        compiler.write_native_object(args.output, wrap=args.python)
+        compiler.write_native_object(args.output)
     else:
         logger.debug('emit shared library')
         logger.debug('write to temporary object file %s', tempfile.gettempdir())
         temp_obj = (tempfile.gettempdir() + os.sep +
                     os.path.basename(args.output) + '.o')
-        compiler.write_native_object(temp_obj, wrap=args.python)
+        compiler.write_native_object(temp_obj)
         cmdargs = (find_linker(),) + find_args() + ('-o', args.output, temp_obj)
         subprocess.check_call(cmdargs)
         os.remove(temp_obj)

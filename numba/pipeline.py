@@ -7,10 +7,10 @@ from __future__ import print_function, division, absolute_import
 
 import os
 import ast as ast_module
+import inspect
 import logging
 import pprint
 import random
-import types
 import llvm.core as lc
 
 # import numba.closures
@@ -141,6 +141,35 @@ def compile2(env, func, restype=None, argtypes=None, ctypes=False,
     return func_env
 
 
+def exportco(env, code_obj, **kwds):
+    '''
+    Given a code object, translate it into a LLVM function.  The
+    resulting function should make calls into the Numba run-time,
+    performing exactly as if the translated code object was under
+    CPython interpretation (or as close as possible; see appendix of
+    the intermediate representation design document for caveats).
+    '''
+    from . import object_
+    argcount = 1 + code_obj.co_argcount
+    flags = code_obj.co_flags
+    if flags & 4:
+        argcount += 1
+    if flags & 8:
+        argcount += 1
+    args = tuple(object_ for _ in range(argcount))
+    signature = object_(*args)
+    with env.TranslationContext(env, code_obj, None, signature,
+                                **kwds) as co_env:
+        for const in code_obj.co_consts:
+            if inspect.iscode(const):
+                exportco(env, const, **kwds)
+        pipeline = env.get_pipeline(kwds.get('pipeline_name',
+                                             'code_obj'))
+        # Generated code is put into environment.
+        pipeline(code_obj, env)
+    return co_env
+
+
 #------------------------------------------------------------------------
 # Pipeline refactored code
 #------------------------------------------------------------------------
@@ -149,17 +178,17 @@ class PipelineStage(object):
 
     is_composed = False
 
-    def check_preconditions(self, ast, env):
+    def check_preconditions(self, ir, env):
         return True
 
-    def check_postconditions(self, ast, env):
+    def check_postconditions(self, ir, env):
         return True
 
-    def transform(self, ast, env):
+    def transform(self, ir, env):
         raise NotImplementedError('%r does not implement transform!' %
                                   type(self))
 
-    def make_specializer(self, cls, ast, env, **kws):
+    def make_specializer(self, cls, ir, env, **kws):
         crnt = env.translation.crnt
         kws = kws.copy()
         kws.update(func_signature=crnt.func_signature,
@@ -175,16 +204,16 @@ class PipelineStage(object):
                    closures=crnt.closures,
                    closure_scope=crnt.closure_scope,
                    env=env)
-        return cls(env.context, crnt.func, ast, **kws)
+        return cls(env.context, crnt.func, ir, **kws)
 
-    def __call__(self, ast, env):
-        if env.stage_checks: self.check_preconditions(ast, env)
+    def __call__(self, ir, env):
+        if env.stage_checks: self.check_preconditions(ir, env)
 
         if self.is_composed:
-            ast = self.transform(ast, env)
+            ir = self.transform(ir, env)
         else:
             try:
-                ast = self.transform(ast, env)
+                ir = self.transform(ir, env)
             except error.NumbaError as e:
                 func_env = env.translation.crnt
                 error_env = func_env.error_env
@@ -195,9 +224,10 @@ class PipelineStage(object):
                     reporting.report(env, exc=e)
                 raise
 
-        env.translation.crnt.ast = ast
-        if env.stage_checks: self.check_postconditions(ast, env)
-        return ast
+        if isinstance(ir, ast_module.AST):
+            env.translation.crnt.ast = ir
+        if env.stage_checks: self.check_postconditions(ir, env)
+        return ir
 
 class SimplePipelineStage(PipelineStage):
 
@@ -612,14 +642,19 @@ class ComposedPipelineStage(PipelineStage):
 
         return name, stage
 
-    def transform(self, ast, env):
+    def transform(self, ir, env):
         logger.debug('Running composed stages: %s', self.stages)
         for stage in self.stages:
             if env.debug:
-                stage_tuple = (stage, utils.ast2tree(ast))
+                if not isinstance(ir, (tuple, list, dict)):
+                    # Assume the IR is a Numba AST if nothing else...
+                    ir_repr = utils.ast2tree(ir)
+                else:
+                    ir_repr = ir
+                stage_tuple = (stage, ir_repr)
                 logger.debug(pprint.pformat(stage_tuple))
-            ast = stage(ast, env)
-        return ast
+            ir = stage(ir, env)
+        return ir
 
     @classmethod
     def compose(cls, stage0, stage1):

@@ -10,6 +10,7 @@ import llvm.core as lc
 import llvm.ee as le
 
 from numba import environment, PY3
+from numba import pipeline
 from numba import llvm_types as lt
 
 logger = logging.getLogger(__name__)
@@ -76,11 +77,15 @@ class _Compiler(object):
 
     method_def_ptr = lc.Type.pointer(method_def_ty)
 
-    def __init__(self, inputs, module_name='numba_exported'):
+    def __init__(self, inputs, module_name='numba_exported', **kwargs):
         self.inputs = inputs
         self.module_name = module_name
 
         self.env = environment.NumbaEnvironment.get_environment()
+
+        self.kwargs = kwargs
+        self.exportall = kwargs.get('exportall', False)
+        self.wrap = kwargs.get('python', False)
 
         #: Map from function names to type signatures for the translated
         #: function (used for header generation).
@@ -117,10 +122,17 @@ class _Compiler(object):
         exports_env.reset()
         return llvm_module
 
-    def _process_inputs(self, wrap=False, **kws):
-        self.env.exports.wrap_exports = wrap
+    def _process_inputs(self, **kws):
+        self.env.exports.wrap_exports = self.wrap
         for ifile in self.inputs:
-            exec(compile(open(ifile).read(), ifile, 'exec'))
+            co = compile(open(ifile).read(), ifile, 'exec')
+            if self.exportall:
+                pipeline.exportco(self.env, co, is_pycc=True)
+                # TODO: Get module lfunc and run on a new module so
+                # that export and exportmany are called properly?  Or,
+                # just exec(co) as well?
+            else:
+                exec(co)
 
     def write_llvm_bitcode(self, output, **kws):
         self._process_inputs(**kws)

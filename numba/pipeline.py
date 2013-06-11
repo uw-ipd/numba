@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-This module contains the Pipeline class which provides a pluggable way to
-define the transformations and the order in which they run on the AST.
+This module contains the Pipeline class which provides a pluggable way
+to define the transformations and the order in which they run on the
+various supported intermediate representations.
 """
 from __future__ import print_function, division, absolute_import
 
@@ -12,6 +13,9 @@ import logging
 import pprint
 import random
 import llvm.core as lc
+
+from llpython import byte_control
+from llpython import addr_flow
 
 # import numba.closures
 from numba import PY3
@@ -30,6 +34,7 @@ from numba.codegen import llvmwrapper
 from numba import ast_constant_folding as constant_folding
 from numba.control_flow import ssa
 from numba.codegen import translate
+from numba.codegen import af_translate
 from numba import utils
 from numba.missing import FixMissingLocations
 from numba.type_inference import infer as type_inference
@@ -158,16 +163,22 @@ def exportco(env, code_obj, **kwds):
         argcount += 1
     args = tuple(object_ for _ in range(argcount))
     signature = object_(*args)
+    ret_val = {}
+    llvm_module = kwds.pop('llvm_module', False)
+    if not llvm_module:
+        llvm_module = lc.Module.new('_export_%s_%x' % (code_obj.co_name,
+                                                       id(code_obj)))
     with env.TranslationContext(env, code_obj, None, signature,
+                                llvm_module=llvm_module,
                                 **kwds) as co_env:
         for const in code_obj.co_consts:
             if inspect.iscode(const):
-                exportco(env, const, **kwds)
+                ret_val.update(exportco(env, const, **kwds))
         pipeline = env.get_pipeline(kwds.get('pipeline_name',
                                              'code_obj'))
-        # Generated code is put into environment.
         pipeline(code_obj, env)
-    return co_env
+        ret_val[code_obj] = co_env
+    return ret_val
 
 
 #------------------------------------------------------------------------
@@ -667,3 +678,48 @@ class ComposedPipelineStage(PipelineStage):
         else:
             stage1s = [check_stage(stage1)[1]]
         return cls(stage0s + stage1s)
+
+# ______________________________________________________________________
+# Code-object pipeline stages
+# ______________________________________________________________________
+
+class CodeObjToAddressControlFlow(PipelineStage):
+
+    def check_preconditions(self, ir, env):
+        return inspect.iscode(ir)
+
+    @staticmethod
+    def check_address_flow(ir):
+        # TODO: Consider making these checks more extensive.  See
+        # llpython.tests.test_byte_flow for more ideas.
+        return (isinstance(ir, byte_control.ControlFlowGraph) and
+                isinstance(ir.blocks, dict) and
+                isinstance(ir.blocks[0], list) and
+                isinstance(ir.blocks[0][0], addr_flow.Instr) and
+                isinstance(ir.blocks[0][0].stackargs, list))
+
+    def check_postconditions(self, ir, env):
+        return self.check_address_flow(ir)
+
+    def transform(self, ir, env):
+        ret_val = byte_control.ControlFlowBuilder.build_cfg_from_co(ir)
+        ret_val.blocks = addr_flow.AddressFlowBuilder().visit_cfg(ret_val)
+        return ret_val
+
+# ______________________________________________________________________
+
+class AddressControlFlowToLLVM(PipelineStage):
+
+    def check_preconditions(self, ir, env):
+        return CodeObjToAddressFlow.check_address_flow(ir)
+
+    def check_postconditions(self, ir, env):
+        return isinstance(ir, lc.Module)
+
+    def transform(self, ir, env):
+        translator = af_translate.AddressFlowTranslator()
+        return translator.translate_cfg(env.crnt.func, ir,
+                                        llvm_module=env.crnt.llvm_module)
+
+# ______________________________________________________________________
+# End of pipeline.py

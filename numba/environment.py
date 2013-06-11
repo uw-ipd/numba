@@ -121,6 +121,8 @@ default_codegen_pipeline = upto(default_pipeline_order, 'CodeGen')
 default_post_codegen_pipeline = upfr(default_pipeline_order, 'CodeGen')
 
 default_code_obj_pipeline = (
+    'CodeObjToAddressControlFlow',
+    'AddressControlFlowToLLVM',
 )
 
 # ______________________________________________________________________

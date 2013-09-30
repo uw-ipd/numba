@@ -11,6 +11,11 @@ def g(x):
         x = None
     return x
 
+def h(x):
+    if x == None or x > 0.0:
+        return x
+    return None
+
 class TestFloatOrNone(unittest.TestCase):
 
     def test_float(self):
@@ -27,6 +32,12 @@ class TestFloatOrNone(unittest.TestCase):
         assign = jit(double(double))(g)
         assert assign(3.0) == None
         assert assign(1.0) == 1.0
+
+    def test_return_double_or_none(self):
+        h_func = jit(double(double))(h)
+        assert h_func(1.0) == 1.0
+        assert h_func(-1.0) == None
+        assert h_func(None) == None
 
 if __name__ == '__main__':
     unittest.main()

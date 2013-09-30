@@ -4,6 +4,7 @@
 #include "generated_conversions.h"
 #include "datetime/_datetime.h"
 #include "datetime/np_datetime_strings.h"
+#include "pstdint.h"
 
 /* Utilities copied from Cython/Utility/TypeConversion.c */
 
@@ -127,48 +128,29 @@ static NUMBA_INLINE size_t __Numba_PyInt_AsSize_t(PyObject* x) {
    return (size_t)val;
 }
 
-static double numba_nan;
-
-static void init_nan(void) {
-  /* Initialize NaN. The sign is irrelevant, an exponent with all bits 1 and
-   a nonzero mantissa means NaN. If the first bit in the mantissa is 1, it is
-   a quiet NaN.
-
-   >>> struct.pack('d', float('nan'))
-   '\x00\x00\x00\x00\x00\x00\xf8\x7f'
-   >>> struct.pack('d', float('nan')) == struct.pack('d', np.nan)
-   True
-
-   We need to choose something different from this NaN representation.
-   */
-  char *p = (char *) &numba_nan;
-  int i;
-
-  /* Assume little endian */
-  p[7] = 0x7f;
-  p[6] = 0xf8;
-
-  for (i = 0; i < 6; i++) {
-      p[i] = 0x55;
-  }
+static NUMBA_INLINE double create_nan()
+{
+    int64_t nan;
+    nan = 0x7fffffffffffffff;
+    return *(double*)&nan;
 }
 
-static NUMBA_INLINE double numba_float_as_double(PyObject *x) {
-    double result;
+static NUMBA_INLINE double numba_float_as_double(PyObject *x)
+{
     if (x == Py_None) {
-        return numba_nan;
+        return create_nan();
     }
     return PyFloat_AsDouble(x);
 }
 
-static NUMBA_INLINE PyObject *numba_float_from_double(double x) {
+static NUMBA_INLINE PyObject *numba_float_from_double(double x)
+{
     PyObject *result;
+
+    /* Check whether x is a NaN */
     if (x != x) {
-        /* Check whether this NaN is numba_nan */
-        if (*(int *) &numba_nan == 0x55555555) {
-            Py_INCREF(Py_None);
-            return Py_None;
-        }
+        Py_INCREF(Py_None);
+        return Py_None;
     }
     return PyFloat_FromDouble(x);
 }
@@ -565,8 +547,6 @@ static npy_int32 get_units_num(char *units_char)
 static int
 export_type_conversion(PyObject *module)
 {
-    init_nan();
-
     EXPORT_FUNCTION(__Numba_PyInt_AsSignedChar, module, error)
     EXPORT_FUNCTION(__Numba_PyInt_AsUnsignedChar, module, error)
     EXPORT_FUNCTION(__Numba_PyInt_AsSignedShort, module, error)

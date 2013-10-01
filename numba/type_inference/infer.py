@@ -769,8 +769,6 @@ class TypeInferer(visitors.NumbaTransformer):
         node.name = node.id
 
         var = self.current_scope.lookup(node.id)
-        if var and node.id == 'None':
-            return nodes.ConstNode(numpy.nan)
         is_none = var and node.id in ('None', 'True', 'False')
         in_closure_scope = self.closure_scope and node.id in self.closure_scope
         if var and (var.is_local or is_none):

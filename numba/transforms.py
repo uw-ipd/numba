@@ -649,11 +649,14 @@ class LateSpecializer(ResolveCoercions,
         return nodes.ObjectTempNode(new_node)
 
     def visit_List(self, node):
+        node.elts = nodes.CoercionNode.coerce(node.elts, object_)
         self.check_context(node)
         self.generic_visit(node)
         return nodes.ObjectTempNode(node)
 
     def visit_Dict(self, node):
+        node.keys = nodes.CoercionNode.coerce(node.keys, object_)
+        node.values = nodes.CoercionNode.coerce(node.values, object_)
         self.check_context(node)
         self.generic_visit(node)
         return nodes.ObjectTempNode(node)

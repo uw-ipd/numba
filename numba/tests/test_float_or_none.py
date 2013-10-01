@@ -16,6 +16,11 @@ def h(x):
         return x
     return None
 
+def h2(x, y):
+    first = None if x < 0.0 else x
+    second = None if y < 0.0 else y
+    return [first, second]
+
 class TestFloatOrNone(unittest.TestCase):
 
     def test_float(self):
@@ -39,5 +44,13 @@ class TestFloatOrNone(unittest.TestCase):
         assert h_func(-1.0) == None
         assert h_func(None) == None
 
+    def test_return_fixed_len_list_double_or_none(self):
+        h2_func = jit(double[:](double, double))(h2)
+        assert h2_func(2.0, 3.0) == [2.0, 3.0]
+        assert h2_func(2.0, -3.0) == [2.0, None]
+        assert h2_func(-2.0, -3.0) == [None, None]
+        assert h2_func(-2.0, 3.0) == [None, 3.0]
+
 if __name__ == '__main__':
     unittest.main()
+

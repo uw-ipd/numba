@@ -927,6 +927,15 @@ class TypeInferer(visitors.NumbaTransformer):
             type = reduce(self.promote_types, types)
             if type.is_array:
                 result_type = typesystem.array(bool_, type.ndim)
+            elif type.is_float:
+                node.left = nodes.CoercionNode(lhs, type)
+                for i, c in enumerate(comparators):
+                    if c.variable.type.is_none:
+                        node.comparators[i] = function_util.utility_call(
+                            self.context, self.llvm_module,
+                            "create_nan", args=[])
+                    else:
+                        node.comparators[i] = nodes.CoercionNode(c, type)
             else:
                 node.left = nodes.CoercionNode(lhs, type)
                 node.comparators = [nodes.CoercionNode(c, type)

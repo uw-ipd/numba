@@ -996,6 +996,10 @@ class LateSpecializer(ResolveCoercions,
         return_type = self.func_signature.return_type
         if node.value is not None:
             node.value = self.visit(nodes.CoercionNode(node.value, return_type))
+        else:
+            node.value = function_util.utility_call(
+                self.context, self.llvm_module,
+                "create_nan", args=[])
         return node
 
     def visit_For(self, node):

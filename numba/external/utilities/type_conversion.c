@@ -131,8 +131,19 @@ static NUMBA_INLINE size_t __Numba_PyInt_AsSize_t(PyObject* x) {
 static NUMBA_INLINE double create_nan()
 {
     int64_t nan;
-    nan = 0x7fffffffffffffff;
+    nan = 0x7ff8555555555555;
     return *(double*)&nan;
+}
+
+static NUMBA_INLINE int is_double_equal_none(double x)
+{
+    if (x != x) {
+        double nan = create_nan();
+        if (memcmp(&x, &nan, sizeof(int64_t)) == 0) {
+            return 1;
+        }
+    }
+    return 0;
 }
 
 static NUMBA_INLINE double numba_float_as_double(PyObject *x)
@@ -147,8 +158,7 @@ static NUMBA_INLINE PyObject *numba_float_from_double(double x)
 {
     PyObject *result;
 
-    /* Check whether x is a NaN */
-    if (x != x) {
+    if (is_double_equal_none(x)) {
         Py_INCREF(Py_None);
         return Py_None;
     }
@@ -595,6 +605,8 @@ export_type_conversion(PyObject *module)
 
     EXPORT_FUNCTION(numba_float_as_double, module, error);
     EXPORT_FUNCTION(numba_float_from_double, module, error);
+    EXPORT_FUNCTION(create_nan, module, error);
+    EXPORT_FUNCTION(is_double_equal_none, module, error);
 
 
     return 0;

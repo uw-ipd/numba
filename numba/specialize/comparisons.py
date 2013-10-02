@@ -83,6 +83,17 @@ class SpecializeComparisons(visitors.NumbaTransformer):
             raise error.NumbaError(
                 node, "datetime comparisons not yet implemented")
 
+        # If float type is being promoted from none type,
+        # then it's our special "nan" that represents a none value
+        # and we need a special comparison function.
+        elif node.left.type.is_float and \
+                isinstance(rhs.node, nodes.NativeCallNode) and \
+                rhs.node.name == 'create_nan':
+            compare = function_util.utility_call(
+                self.context, self.llvm_module,
+                "is_double_equal_none", args=[node.left])
+            node = nodes.CoercionNode(compare, bool_)
+
         return node
 
     def single_compare_objects(self, node):

@@ -107,6 +107,8 @@ utility_funcs = list(object_to_numeric.itervalues()) + [
 
     UtilityFunction.load("numba_float_as_double", double(object_)),
     UtilityFunction.load("numba_float_from_double", object_(double)),
+    UtilityFunction.load("create_nan", double()),
+    UtilityFunction.load("is_double_equal_none", int_(double)),
 ]
 
 def default_utility_library(context):

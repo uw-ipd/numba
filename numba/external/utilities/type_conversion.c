@@ -128,30 +128,67 @@ static NUMBA_INLINE size_t __Numba_PyInt_AsSize_t(PyObject* x) {
    return (size_t)val;
 }
 
-static NUMBA_INLINE double create_nan()
+static NUMBA_INLINE float create_float_nan()
+{
+    int32_t nan;
+    nan = 0x7ff85555;
+    return *(float*)&nan;
+}
+
+static NUMBA_INLINE double create_double_nan()
 {
     int64_t nan;
     nan = 0x7ff8555555555555;
     return *(double*)&nan;
 }
 
-static NUMBA_INLINE int is_double_equal_none(double x)
+static NUMBA_INLINE int is_float_equal_none(float x)
 {
     if (x != x) {
-        double nan = create_nan();
-        if (memcmp(&x, &nan, sizeof(int64_t)) == 0) {
+        float nan = create_float_nan();
+        if (memcmp(&x, &nan, sizeof(float)) == 0) {
             return 1;
         }
     }
     return 0;
 }
 
+static NUMBA_INLINE int is_double_equal_none(double x)
+{
+    if (x != x) {
+        double nan = create_double_nan();
+        if (memcmp(&x, &nan, sizeof(double)) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static NUMBA_INLINE float numba_float_as_float(PyObject *x)
+{
+    if (x == Py_None) {
+        return create_float_nan();
+    }
+    return (float)PyFloat_AsDouble(x);
+}
+
 static NUMBA_INLINE double numba_float_as_double(PyObject *x)
 {
     if (x == Py_None) {
-        return create_nan();
+        return create_double_nan();
     }
     return PyFloat_AsDouble(x);
+}
+
+static NUMBA_INLINE PyObject *numba_float_from_float(float x)
+{
+    PyObject *result;
+
+    if (is_float_equal_none(x)) {
+        Py_INCREF(Py_None);
+        return Py_None;
+    }
+    return PyFloat_FromDouble((double)x);
 }
 
 static NUMBA_INLINE PyObject *numba_float_from_double(double x)
@@ -164,7 +201,6 @@ static NUMBA_INLINE PyObject *numba_float_from_double(double x)
     }
     return PyFloat_FromDouble(x);
 }
-
 
 /////////////// ObjectAsUCS4.proto ///////////////
 
@@ -603,11 +639,14 @@ export_type_conversion(PyObject *module)
     EXPORT_FUNCTION(convert_timedelta_units_str, module, error);
     EXPORT_FUNCTION(get_units_num, module, error);
 
-    EXPORT_FUNCTION(numba_float_as_double, module, error);
-    EXPORT_FUNCTION(numba_float_from_double, module, error);
-    EXPORT_FUNCTION(create_nan, module, error);
+    EXPORT_FUNCTION(create_float_nan, module, error);
+    EXPORT_FUNCTION(create_double_nan, module, error);
+    EXPORT_FUNCTION(is_float_equal_none, module, error);
     EXPORT_FUNCTION(is_double_equal_none, module, error);
-
+    EXPORT_FUNCTION(numba_float_as_float, module, error);
+    EXPORT_FUNCTION(numba_float_as_double, module, error);
+    EXPORT_FUNCTION(numba_float_from_float, module, error);
+    EXPORT_FUNCTION(numba_float_from_double, module, error);
 
     return 0;
 error:

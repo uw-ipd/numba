@@ -105,10 +105,14 @@ utility_funcs = list(object_to_numeric.itervalues()) + [
     UtilityFunction.load("convert_timedelta_units_str", int_(string_)),
     UtilityFunction.load("get_units_num", int32(string_)),
 
-    UtilityFunction.load("numba_float_as_double", double(object_)),
-    UtilityFunction.load("numba_float_from_double", object_(double)),
-    UtilityFunction.load("create_nan", double()),
+    UtilityFunction.load("create_float_nan", float_()),
+    UtilityFunction.load("create_double_nan", double()),
+    UtilityFunction.load("is_float_equal_none", int_(float_)),
     UtilityFunction.load("is_double_equal_none", int_(double)),
+    UtilityFunction.load("numba_float_as_float", float_(object_)),
+    UtilityFunction.load("numba_float_as_double", double(object_)),
+    UtilityFunction.load("numba_float_from_float", object_(float_)),
+    UtilityFunction.load("numba_float_from_double", object_(double)),
 ]
 
 def default_utility_library(context):

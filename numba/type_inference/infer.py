@@ -931,9 +931,14 @@ class TypeInferer(visitors.NumbaTransformer):
                 node.left = nodes.CoercionNode(lhs, type)
                 for i, c in enumerate(comparators):
                     if c.variable.type.is_none:
-                        node.comparators[i] = function_util.utility_call(
-                            self.context, self.llvm_module,
-                            "create_nan", args=[])
+                        if type.itemsize == 4:
+                            node.comparators[i] = function_util.utility_call(
+                                self.context, self.llvm_module,
+                                "create_float_nan", args=[])
+                        else:
+                            node.comparators[i] = function_util.utility_call(
+                                self.context, self.llvm_module,
+                                "create_double_nan", args=[])
                     else:
                         node.comparators[i] = nodes.CoercionNode(c, type)
             else:

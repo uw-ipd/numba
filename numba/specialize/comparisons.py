@@ -88,7 +88,14 @@ class SpecializeComparisons(visitors.NumbaTransformer):
         # and we need a special comparison function.
         elif node.left.type.is_float and \
                 isinstance(rhs.node, nodes.NativeCallNode) and \
-                rhs.node.name == 'create_nan':
+                rhs.node.name == 'create_float_nan':
+            compare = function_util.utility_call(
+                self.context, self.llvm_module,
+                "is_float_equal_none", args=[node.left])
+            node = nodes.CoercionNode(compare, bool_)
+        elif node.left.type.is_float and \
+                isinstance(rhs.node, nodes.NativeCallNode) and \
+                rhs.node.name == 'create_double_nan':
             compare = function_util.utility_call(
                 self.context, self.llvm_module,
                 "is_double_equal_none", args=[node.left])

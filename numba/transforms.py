@@ -322,10 +322,14 @@ class ResolveCoercions(visitors.NumbaTransformer):
             if node_type.is_int:
                 new_node = self.convert_int_to_object(node.node)
             elif node_type.is_float:
-                # cls = pyapi.PyFloat_FromDouble
-                new_node = function_util.utility_call(
-                    self.context, self.llvm_module,
-                    "numba_float_from_double", args=args)
+                if node_type.itemsize == 4:
+                    new_node = function_util.utility_call(
+                        self.context, self.llvm_module,
+                        "numba_float_from_float", args=args)
+                else:
+                    new_node = function_util.utility_call(
+                        self.context, self.llvm_module,
+                        "numba_float_from_double", args=args)
             elif node_type.is_complex:
                 cls = pyapi.PyComplex_FromDoubles
                 complex_value = nodes.CloneableNode(node.node)
@@ -429,10 +433,14 @@ class ResolveCoercions(visitors.NumbaTransformer):
             if node_type.is_int: # and not
                 new_node = self.object_to_int(node.node, node_type)
             elif node_type.is_float:
-                # cls = pyapi.PyFloat_AsDouble
-                new_node = function_util.utility_call(
-                    self.context, self.llvm_module,
-                    "numba_float_as_double", args=[node.node])
+                if node_type.itemsize == 4:
+                    new_node = function_util.utility_call(
+                        self.context, self.llvm_module,
+                        "numba_float_as_float", args=[node.node])
+                else:
+                    new_node = function_util.utility_call(
+                        self.context, self.llvm_module,
+                        "numba_float_as_double", args=[node.node])
             elif node_type.is_complex:
                 # FIXME: This conversion has to be pretty slow.  We
                 # need to move towards being ABI-savvy enough to just
@@ -997,9 +1005,14 @@ class LateSpecializer(ResolveCoercions,
         if node.value is not None:
             node.value = self.visit(nodes.CoercionNode(node.value, return_type))
         else:
-            node.value = function_util.utility_call(
-                self.context, self.llvm_module,
-                "create_nan", args=[])
+            if return_type.kind == 'float' and return_type.itemsize == 4:
+                node.value = function_util.utility_call(
+                    self.context, self.llvm_module,
+                    "create_float_nan", args=[])
+            elif return_type.kind == 'float' and return_type.itemsize == 8:
+                node.value = function_util.utility_call(
+                    self.context, self.llvm_module,
+                    "create_double_nan", args=[])
         return node
 
     def visit_For(self, node):

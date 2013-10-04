@@ -130,14 +130,14 @@ static NUMBA_INLINE size_t __Numba_PyInt_AsSize_t(PyObject* x) {
 
 static NUMBA_INLINE float create_float_nan()
 {
-    int32_t nan;
+    uint32_t nan;
     nan = 0x7ff85555;
     return *(float*)&nan;
 }
 
 static NUMBA_INLINE double create_double_nan()
 {
-    int64_t nan;
+    uint64_t nan;
     nan = 0x7ff8555555555555;
     return *(double*)&nan;
 }
@@ -146,7 +146,7 @@ static NUMBA_INLINE int is_float_equal_none(float x)
 {
     if (x != x) {
         float nan = create_float_nan();
-        if (memcmp(&x, &nan, sizeof(float)) == 0) {
+        if ((uint32_t*)&x == *(uint32_t*)&nan) {
             return 1;
         }
     }
@@ -157,7 +157,7 @@ static NUMBA_INLINE int is_double_equal_none(double x)
 {
     if (x != x) {
         double nan = create_double_nan();
-        if (memcmp(&x, &nan, sizeof(double)) == 0) {
+        if ((uint64_t*)&x == *(uint64_t*)&nan) {
             return 1;
         }
     }

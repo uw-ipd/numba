@@ -128,6 +128,10 @@ static NUMBA_INLINE size_t __Numba_PyInt_AsSize_t(PyObject* x) {
    return (size_t)val;
 }
 
+
+static float float_nan;
+static double double_nan;
+
 static NUMBA_INLINE float create_float_nan()
 {
     uint32_t nan;
@@ -144,22 +148,16 @@ static NUMBA_INLINE double create_double_nan()
 
 static NUMBA_INLINE int is_float_equal_none(float x)
 {
-    if (x != x) {
-        float nan = create_float_nan();
-        if ((uint32_t*)&x == *(uint32_t*)&nan) {
-            return 1;
-        }
+    if (*(uint32_t*)&x == *(uint32_t*)&float_nan) {
+        return 1;
     }
     return 0;
 }
 
 static NUMBA_INLINE int is_double_equal_none(double x)
 {
-    if (x != x) {
-        double nan = create_double_nan();
-        if ((uint64_t*)&x == *(uint64_t*)&nan) {
-            return 1;
-        }
+    if (*(uint64_t*)&x == *(uint64_t*)&double_nan) {
+        return 1;
     }
     return 0;
 }
@@ -167,7 +165,7 @@ static NUMBA_INLINE int is_double_equal_none(double x)
 static NUMBA_INLINE float numba_float_as_float(PyObject *x)
 {
     if (x == Py_None) {
-        return create_float_nan();
+        return float_nan;
     }
     return (float)PyFloat_AsDouble(x);
 }
@@ -175,15 +173,13 @@ static NUMBA_INLINE float numba_float_as_float(PyObject *x)
 static NUMBA_INLINE double numba_float_as_double(PyObject *x)
 {
     if (x == Py_None) {
-        return create_double_nan();
+        return double_nan;
     }
     return PyFloat_AsDouble(x);
 }
 
 static NUMBA_INLINE PyObject *numba_float_from_float(float x)
 {
-    PyObject *result;
-
     if (is_float_equal_none(x)) {
         Py_INCREF(Py_None);
         return Py_None;
@@ -193,8 +189,6 @@ static NUMBA_INLINE PyObject *numba_float_from_float(float x)
 
 static NUMBA_INLINE PyObject *numba_float_from_double(double x)
 {
-    PyObject *result;
-
     if (is_double_equal_none(x)) {
         Py_INCREF(Py_None);
         return Py_None;
@@ -593,6 +587,9 @@ static npy_int32 get_units_num(char *units_char)
 static int
 export_type_conversion(PyObject *module)
 {
+    float_nan = create_float_nan();
+    double_nan = create_double_nan();
+
     EXPORT_FUNCTION(__Numba_PyInt_AsSignedChar, module, error)
     EXPORT_FUNCTION(__Numba_PyInt_AsUnsignedChar, module, error)
     EXPORT_FUNCTION(__Numba_PyInt_AsSignedShort, module, error)

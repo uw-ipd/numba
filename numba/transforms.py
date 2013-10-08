@@ -319,7 +319,10 @@ class ResolveCoercions(visitors.NumbaTransformer):
         elif node_type.is_numeric and node_type.typename not in ('char', 'uchar'):
             cls = None
             args = node.node,
-            if node_type.is_int:
+
+            if node_type.is_cdecimal:
+                raise NotImplementedError
+            elif node_type.is_int:
                 new_node = self.convert_int_to_object(node.node)
             elif node_type.is_float:
                 cls = pyapi.PyFloat_FromDouble
@@ -423,7 +426,9 @@ class ResolveCoercions(visitors.NumbaTransformer):
             if node_type == size_t:
                 node_type = ulonglong
 
-            if node_type.is_int: # and not
+            if node_type.is_cdecimal:
+                raise NotImplementedError
+            elif node_type.is_int: # and not
                 new_node = self.object_to_int(node.node, node_type)
             elif node_type.is_float:
                 cls = pyapi.PyFloat_AsDouble

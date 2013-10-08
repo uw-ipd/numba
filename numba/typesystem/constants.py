@@ -20,6 +20,7 @@ from numba.support import cffi_support
 
 import numpy as np
 import datetime
+import decimal
 
 #------------------------------------------------------------------------
 # Class -> Type
@@ -39,6 +40,7 @@ def get_typing_defaults(u):
         #datetime.datetime: u.datetime,
         np.datetime64: u.datetime(),
         np.timedelta64: u.timedelta(),
+        #decimal.Decimal: u.cdecimal(),
     }
     return typing_defaults
 

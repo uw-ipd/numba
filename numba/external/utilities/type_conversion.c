@@ -4,6 +4,7 @@
 #include "generated_conversions.h"
 #include "datetime/_datetime.h"
 #include "datetime/np_datetime_strings.h"
+#include <mpdecimal.h>
 
 /* Utilities copied from Cython/Utility/TypeConversion.c */
 
@@ -348,6 +349,13 @@ static npy_int32 convert_numpy_timedelta_to_units(PyObject *numpy_timedelta)
     return ((PyDatetimeScalarObject*)numpy_timedelta)->obmeta.base;
 }
 
+static mpd_context_t mpd_context;
+
+static void init_mpdec()
+{
+    mpd_init(&mpd_context, 38);
+}
+
 static PyObject* create_numpy_datetime(
     npy_int64 timestamp,
     npy_int32 units,
@@ -515,9 +523,11 @@ static npy_int32 get_units_num(char *units_char)
     return parse_datetime_unit_from_string(units_char, 1, NULL);
 }
 
+
 static int
 export_type_conversion(PyObject *module)
 {
+    init_mpdec();
     EXPORT_FUNCTION(__Numba_PyInt_AsSignedChar, module, error)
     EXPORT_FUNCTION(__Numba_PyInt_AsUnsignedChar, module, error)
     EXPORT_FUNCTION(__Numba_PyInt_AsSignedShort, module, error)

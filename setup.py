@@ -209,6 +209,7 @@ setup(
 
             include_dirs=[numba_include_dir, extensibletype_include,
                           numpy.get_include(), llvmmath_include_dir],
+            libraries=["mpdec"],
             depends=["numba/external/utilities/type_conversion.c",
                      "numba/external/utilities/virtuallookup.c",
                      "numba/external/utilities/generated_conversions.c",

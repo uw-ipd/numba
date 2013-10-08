@@ -249,7 +249,8 @@ class NumbaType(_NumbaType):
 #------------------------------------------------------------------------
 
 def pass_by_ref(type): # TODO: Get rid of this
-    return type.is_struct or type.is_complex or type.is_datetime or type.is_timedelta
+    return type.is_struct or type.is_complex or type.is_datetime or \
+        type.is_timedelta or type.is_cdecimal
 
 class Function(object):
     """
@@ -292,7 +293,8 @@ class function(NumbaType):
     @property
     def struct_by_reference(self):
         rt = self.return_type
-        byref = lambda t: t.is_struct or t.is_complex or t.is_datetime or t.is_timedelta
+        byref = lambda t: t.is_struct or t.is_complex or t.is_datetime or \
+            t.is_timedelta or t.is_cdecimal
         return rt and byref(rt) or any(imap(byref, self.args))
 
     @property
@@ -574,6 +576,20 @@ class timedelta_(NumbaType):
             return "timedelta_" + self.units_char
         else:
             return "timedelta"
+
+
+@consing
+class cdecimal_(NumbaType):
+    argnames = ['context_ptr', 'mpd_ptr']
+    flags = ['numeric']
+
+    @property
+    def itemsize(self):
+        return self.context_ptr.itemsize + self.mpd_ptr.itemsize
+
+    def __repr__(self):
+        return 'cdecimal'
+
 
 @consing
 class meta(NumbaType):

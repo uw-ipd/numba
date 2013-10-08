@@ -1006,13 +1006,13 @@ class LateSpecializer(ResolveCoercions,
             node.value = self.visit(nodes.CoercionNode(node.value, return_type))
         else:
             if return_type.kind == 'float' and return_type.itemsize == 4:
-                node.value = function_util.utility_call(
-                    self.context, self.llvm_module,
-                    "create_float_nan", args=[])
+                nan = np.array(0x7ff85555, dtype=np.uint32)
+                nan.dtype = np.float32
+                node.value = nodes.ConstNode(nan.item(), float32)
             elif return_type.kind == 'float' and return_type.itemsize == 8:
-                node.value = function_util.utility_call(
-                    self.context, self.llvm_module,
-                    "create_double_nan", args=[])
+                nan = np.array(0x7ff8555555555555, dtype=np.uint64)
+                nan.dtype = np.float64
+                node.value = nodes.ConstNode(nan.item(), float64)
         return node
 
     def visit_For(self, node):

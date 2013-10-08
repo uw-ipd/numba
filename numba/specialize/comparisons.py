@@ -83,22 +83,23 @@ class SpecializeComparisons(visitors.NumbaTransformer):
             raise error.NumbaError(
                 node, "datetime comparisons not yet implemented")
 
+        # If float type is being promoted from none type,
+        # then it's our special "nan" that represents a none value
+        # and we need a special comparison function.
         elif node.left.type.is_float and \
-                isinstance(rhs.node, nodes.ConstNode) and \
-                rhs.node.variable.name == 'nan' and \
-                rhs.node.type.itemsize == 4:
-            import numpy
-            nan = numpy.array(0x7ff85555, dtype=numpy.uint32)
-            nan.dtype = numpy.float32
-            node.left = nodes.ConstNode(nan.item(), float32)
+                isinstance(rhs.node, nodes.NativeCallNode) and \
+                rhs.node.name == 'create_float_nan':
+            compare_func = function_util.utility_call(
+                self.context, self.llvm_module,
+                "is_float_equal_none", args=[node.left])
+            node = nodes.CoercionNode(compare_func, bool_)
         elif node.left.type.is_float and \
-                isinstance(rhs.node, nodes.ConstNode) and \
-                rhs.node.variable.name == 'nan' and \
-                rhs.node.type.itemsize == 8:
-            import numpy
-            nan = numpy.array(0x7ff8555555555555, dtype=numpy.uint64)
-            nan.dtype = numpy.float64
-            node.left = nodes.ConstNode(nan.item(), float64)
+                isinstance(rhs.node, nodes.NativeCallNode) and \
+                rhs.node.name == 'create_double_nan':
+            compare_func = function_util.utility_call(
+                self.context, self.llvm_module,
+                "is_double_equal_none", args=[node.left])
+            node = nodes.CoercionNode(compare_func, bool_)
 
         return node
 

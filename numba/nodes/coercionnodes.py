@@ -99,6 +99,17 @@ class CoercionNode(ExprNode):
                     not timedelta_type.is_timedelta:
                 node = CoercionNode(node, timedelta)
 
+        elif ((node.variable.type.is_cdecimal or dst_type.is_cdecimal) and
+                (node.variable.type.is_cdecimal or dst_type.is_cdecimal)):
+            if dst_type.is_cdecimal:
+                cdecimal_type = dst_type
+            else:
+                cdecimal_type = node.variable.type
+
+            if not cdecimal_type.is_cdecimal and \
+                    not cdecimal_type.is_cdecimal:
+                node = CoercionNode(node, cdecimal)
+
         return node
 
     def __repr__(self):

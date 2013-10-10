@@ -77,7 +77,6 @@ size_t       = unit("int", "size_t",       flags=["numeric"])
 npy_intp     = unit("int", "npy_intp",     flags=["numeric"])
 Py_ssize_t   = unit("int", "Py_ssize_t",   flags=["numeric"])
 Py_uintptr_t = unit("int", "Py_uintptr_t", flags=["numeric"])
-cdecimal     = unit("int", "uint64",       flags=["numeric"])
 
 float32      = unit("float", "float32",    flags=["numeric"])
 float64      = unit("float", "float64",    flags=["numeric"])
@@ -127,6 +126,8 @@ def timedelta(units=None, numpy=True):
     timedelta_type = timedelta_(int64, int32, units)
     timedelta_type.is_numpy_timedelta = numpy
     return timedelta_type
+
+cdecimal = cdecimal_(uint64)
 
 # ______________________________________________________________________
 

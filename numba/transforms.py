@@ -320,9 +320,7 @@ class ResolveCoercions(visitors.NumbaTransformer):
             cls = None
             args = node.node,
 
-            if node_type.is_cdecimal:
-                raise NotImplementedError
-            elif node_type.is_int:
+            if node_type.is_int:
                 new_node = self.convert_int_to_object(node.node)
             elif node_type.is_float:
                 cls = pyapi.PyFloat_FromDouble
@@ -362,6 +360,8 @@ class ResolveCoercions(visitors.NumbaTransformer):
                 new_node = function_util.utility_call(
                         self.context, self.llvm_module,
                         "create_numpy_timedelta", args=args)
+            elif node_type.is_cdecimal:
+                raise NotImplementedError
             else:
                 raise error.NumbaError(
                     node, "Don't know how to coerce type %r to PyObject" %
@@ -426,9 +426,7 @@ class ResolveCoercions(visitors.NumbaTransformer):
             if node_type == size_t:
                 node_type = ulonglong
 
-            if node_type.is_cdecimal:
-                raise NotImplementedError
-            elif node_type.is_int: # and not
+            if node_type.is_int: # and not
                 new_node = self.object_to_int(node.node, node_type)
             elif node_type.is_float:
                 cls = pyapi.PyFloat_AsDouble
@@ -469,6 +467,8 @@ class ResolveCoercions(visitors.NumbaTransformer):
                     "convert_numpy_timedelta_to_units", args=[node.node])
                 new_node = nodes.DateTimeNode(diff_func, units_func)
             elif node_type.is_timedelta:
+                raise NotImplementedError
+            if node_type.is_cdecimal:
                 raise NotImplementedError
             else:
                 raise error.NumbaError(
@@ -1232,6 +1232,10 @@ class LateSpecializer(ResolveCoercions,
             diff = nodes.ConstNode(0, int64)
             units = nodes.ConstNode(0, int32)
             node = nodes.TimeDeltaNode(diff, units)
+
+        elif node.type.is_cdecimal:
+            mpd_ptr = nodes.ConstNode(0, int64)
+            node = nodes.CDecimalNode(mpd_ptr)
 
         elif node.type.is_pointer and not node.type.is_string:
             addr_int = constnodes.get_pointer_address(constant, node.type)

@@ -42,6 +42,9 @@ def register_with_argchecking(nargs, can_handle_deferred_types=False):
             if name == 'datetime':
                 import datetime
                 value = datetime.datetime
+            elif name == 'cdecimal':
+                import decimal
+                value = decimal.Decimal
             else:
                 value = getattr(builtins, name)
         else:

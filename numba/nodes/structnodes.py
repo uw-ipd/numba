@@ -141,3 +141,23 @@ class TimeDeltaAttributeNode(ExprNode):
         self.type = value.type
         self.variable = Variable(self.type)
 
+class CDecimalNode(ExprNode):
+
+    _fields = ['mpd_string']
+
+    type = cdecimal
+    variable = Variable(type)
+
+    def __init__(self, mpd_string):
+        self.mpd_string = mpd_string
+
+class CDecimalAttributeNode(ExprNode):
+
+    _fields_ = ['value']
+
+    def __init__(self, value, attr):
+        self.value = value
+        self.attr = attr
+        self.type = value.type
+        self.variable = Variable(self.type)
+

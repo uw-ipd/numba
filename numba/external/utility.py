@@ -104,6 +104,8 @@ utility_funcs = list(object_to_numeric.itervalues()) + [
     UtilityFunction.load("extract_timedelta_sec", int_(int64, int32)),
     UtilityFunction.load("convert_timedelta_units_str", int_(string_)),
     UtilityFunction.load("get_units_num", int32(string_)),
+    
+    UtilityFunction.load("create_mpd_from_string", uint64(string_)),
 ]
 
 def default_utility_library(context):

@@ -264,7 +264,8 @@ def update_signature(tree, env):
     func_signature = func_env.func_signature
 
     restype = func_signature.return_type
-    if restype and (restype.is_struct or restype.is_complex or restype.is_datetime or restype.is_timedelta):
+    if restype and (restype.is_struct or restype.is_complex or
+            restype.is_datetime or restype.is_timedelta or restype.is_cdecimal,):
         # Change signatures returning complex numbers or structs to
         # signatures taking a pointer argument to a complex number
         # or struct

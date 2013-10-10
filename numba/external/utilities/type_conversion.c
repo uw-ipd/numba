@@ -356,6 +356,13 @@ static void init_mpdec()
     mpd_init(&mpd_context, 38);
 }
 
+static mpd_t* create_mpd_from_string(char *mpd_string)
+{
+    mpd_t *new = mpd_new(&mpd_context);
+    mpd_set_string(new, mpd_string, &mpd_context);
+    return new;
+}
+
 static PyObject* create_numpy_datetime(
     npy_int64 timestamp,
     npy_int32 units,
@@ -573,6 +580,8 @@ export_type_conversion(PyObject *module)
 
     EXPORT_FUNCTION(convert_timedelta_units_str, module, error);
     EXPORT_FUNCTION(get_units_num, module, error);
+    
+    EXPORT_FUNCTION(create_mpd_from_string, module, error);
 
     return 0;
 error:

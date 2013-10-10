@@ -580,12 +580,12 @@ class timedelta_(NumbaType):
 
 @consing
 class cdecimal_(NumbaType):
-    argnames = ['context_ptr', 'mpd_ptr']
+    argnames = ['mpd_ptr']
     flags = ['numeric']
 
     @property
     def itemsize(self):
-        return self.context_ptr.itemsize + self.mpd_ptr.itemsize
+        return self.mpd_ptr.itemsize
 
     def __repr__(self):
         return 'cdecimal'

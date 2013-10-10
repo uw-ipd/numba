@@ -110,9 +110,9 @@ def lower_timedelta(domain, codomain, type, params):
     diff, units = params[0:2]
     return codomain.struct_([('diff', diff), ('units', units)])
 
-'''def lower_cdecimal(domain, codomain, type, params):
-    context_ptr, mpd_ptr = params[0:2]
-    return codomain.struct_([('context_ptr', context_ptr), ('mpd_ptr', mpd_ptr)])'''
+def lower_cdecimal(domain, codomain, type, params):
+    mpd_ptr = params[0]
+    return codomain.struct_([('mpd_ptr', mpd_ptr)])
 
 #------------------------------------------------------------------------
 # Default Lowering Table
@@ -125,7 +125,7 @@ default_numba_lowering_table = {
     "complex":          lower_complex,
     "datetime":         lower_datetime,
     "timedelta":        lower_timedelta,
-    #"cdecimal":         lower_cdecimal,
+    "cdecimal":         lower_cdecimal,
     # "array":            lower_array,
     "string":           lower_string,
     # "carray":           lower_to_pointer,

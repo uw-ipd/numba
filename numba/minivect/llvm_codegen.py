@@ -33,7 +33,8 @@ def handle_struct_passing(builder, alloca_func, largs, signature):
             if signature.struct_by_reference:
                 if arg_type.is_complex or \
                         arg_type.is_datetime or \
-                        arg_type.is_timedelta:
+                        arg_type.is_timedelta or \
+                        arg_type.is_cdecimal:
                     new_arg = alloca_func(arg_type)
                     builder.store(larg, new_arg)
                     larg = new_arg

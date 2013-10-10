@@ -16,7 +16,7 @@ from numba import *
 from numba.codegen import debug
 from numba.codegen.debug import logger
 from numba.codegen.codeutils import llvm_alloca
-from numba.codegen import coerce, complexsupport, refcounting, datetimesupport
+from numba.codegen import coerce, complexsupport, refcounting, datetimesupport, cdecimalsupport
 from numba.codegen.llvmcontext import LLVMContextManager
 
 from numba import visitors, nodes, llvm_types, utils, function_util
@@ -65,7 +65,8 @@ class LLVMCodeGenerator(visitors.NumbaVisitor,
                         complexsupport.ComplexSupportMixin,
                         refcounting.RefcountingMixin,
                         visitors.NoPythonContextMixin,
-                        datetimesupport.DateTimeSupportMixin):
+                        datetimesupport.DateTimeSupportMixin,
+                        cdecimalsupport.CDecimalSupportMixin):
     """
     Translate a Python AST to LLVM. Each visit_* method should directly
     return an LLVM value.
@@ -1265,6 +1266,9 @@ class LLVMCodeGenerator(visitors.NumbaVisitor,
         elif dst_type.is_int and node_type.is_numpy_datetime and \
                 not isinstance(node.node, nodes.DateTimeAttributeNode):
             return self.builder.extract_value(val, 0)
+        elif dst_type.is_int and node_type.is_cdecimal and \
+                not isinstance(node.node, nodes.CDecimalAttributeNode):
+            return self.builder.extract_value(val, 0)
         else:
             flags = {}
             add_cast_flag_unsigned(flags, node_type, dst_type)
@@ -1512,6 +1516,22 @@ class LLVMCodeGenerator(visitors.NumbaVisitor,
                 return self.builder.extract_value(result, 0)
             elif node.attr == 'units':
                 return self.builder.extract_value(result, 1)
+
+
+    def visit_CDecimalNode(self, node):
+        mpd_ptr_func = function_util.utility_call(
+            self.context, self.llvm_module,
+            "create_mpd_from_string", args=[node.mpd_string])
+        node.mpd_ptr = mpd_ptr_func
+        mpd_ptr = self.visit(node.mpd_ptr)
+        return self._create_cdecimal(mpd_ptr)
+
+    def visit_CDecimalAttributeNode(self, node):
+        result = self.visit(node.value)
+        if node.value.type.is_cdecimal:
+            assert result.type.kind == llvm.core.TYPE_STRUCT, result.type
+            if node.attr == 'mpd_ptr':
+                return self.builder.extract_value(result, 0)
 
     #------------------------------------------------------------------------
     # Structs

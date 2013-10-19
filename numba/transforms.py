@@ -361,7 +361,13 @@ class ResolveCoercions(visitors.NumbaTransformer):
                         self.context, self.llvm_module,
                         "create_numpy_timedelta", args=args)
             elif node_type.is_cdecimal:
-                raise NotImplementedError
+                mpd_struct = nodes.CloneableNode(node.node)
+                args = [
+                    nodes.CDecimalAttributeNode(mpd_struct, 'mpd_ptr'),
+                ]
+                new_node = function_util.utility_call(
+                        self.context, self.llvm_module,
+                        "create_decimal", args=args)
             else:
                 raise error.NumbaError(
                     node, "Don't know how to coerce type %r to PyObject" %
@@ -468,8 +474,11 @@ class ResolveCoercions(visitors.NumbaTransformer):
                 new_node = nodes.DateTimeNode(diff_func, units_func)
             elif node_type.is_timedelta:
                 raise NotImplementedError
-            if node_type.is_cdecimal:
-                raise NotImplementedError
+            elif node_type.is_cdecimal:
+                mpd_func = function_util.utility_call(
+                    self.context, self.llvm_module,
+                    "convert_decimal_to_mpd", args=[node.node])
+                new_node = nodes.CDecimalNode(timestamp_func, units_func)
             else:
                 raise error.NumbaError(
                     node, "Don't know how to coerce a Python object to a %r" %
@@ -1234,8 +1243,8 @@ class LateSpecializer(ResolveCoercions,
             node = nodes.TimeDeltaNode(diff, units)
 
         elif node.type.is_cdecimal:
-            mpd_ptr = nodes.ConstNode(0, int64)
-            node = nodes.CDecimalNode(mpd_ptr)
+            mpd_string = nodes.ConstNode('', c_string_type)
+            node = nodes.CDecimalNode(mpd_string)
 
         elif node.type.is_pointer and not node.type.is_string:
             addr_int = constnodes.get_pointer_address(constant, node.type)

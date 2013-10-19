@@ -106,6 +106,7 @@ utility_funcs = list(object_to_numeric.itervalues()) + [
     UtilityFunction.load("get_units_num", int32(string_)),
     
     UtilityFunction.load("create_mpd_from_string", uint64(string_)),
+    UtilityFunction.load("create_decimal", object_(void_p)),
 ]
 
 def default_utility_library(context):

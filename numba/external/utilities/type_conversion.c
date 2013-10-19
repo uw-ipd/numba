@@ -349,6 +349,7 @@ static npy_int32 convert_numpy_timedelta_to_units(PyObject *numpy_timedelta)
     return ((PyDatetimeScalarObject*)numpy_timedelta)->obmeta.base;
 }
 
+
 static mpd_context_t mpd_context;
 
 static void init_mpdec()
@@ -362,6 +363,13 @@ static mpd_t* create_mpd_from_string(char *mpd_string)
     mpd_set_string(new, mpd_string, &mpd_context);
     return new;
 }
+
+static PyObject* create_decimal(mpd_t *mpd)
+{
+    char *mpd_str = mpd_to_sci(mpd, &mpd_context);
+    return PyInt_FromLong(3);
+}
+
 
 static PyObject* create_numpy_datetime(
     npy_int64 timestamp,
@@ -582,6 +590,7 @@ export_type_conversion(PyObject *module)
     EXPORT_FUNCTION(get_units_num, module, error);
     
     EXPORT_FUNCTION(create_mpd_from_string, module, error);
+    EXPORT_FUNCTION(create_decimal, module, error);
 
     return 0;
 error:

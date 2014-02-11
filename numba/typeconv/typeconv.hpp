@@ -65,6 +65,7 @@ struct Rating{
     unsigned short promote;
     unsigned short safe_convert;
     unsigned short unsafe_convert;
+    unsigned short no_convert;
 
     Rating();
     void bad();

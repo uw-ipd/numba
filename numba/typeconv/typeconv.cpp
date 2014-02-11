@@ -149,9 +149,15 @@ int TypeManager::_selectOverload(Type sig[], Type ovsigs[], int &selected,
 		for (int j = 0; j < sigsz; ++j) {
 			TypeCompatibleCode tcc = isCompatible(sig[j], entry[j]);
 			if (tcc == TCC_FALSE) {
-				rate.bad();
-				++badcount;
-				break; // stop the loop early for incompatbile type
+                // Allow exception if target type is pyobject since
+                // no conversion needed.
+                if (entry[i].get() == 0)
+                    rate.no_convert += 1;
+                else {
+				    rate.bad();
+				    ++badcount;
+				    break; // stop the loop early for incompatbile type
+                }
 			}
 			switch(tcc) {
 			case TCC_PROMOTE:
@@ -189,22 +195,25 @@ int TypeManager::_selectOverload(Type sig[], Type ovsigs[], int &selected,
 }
 
 // ----- Ratings -----
-Rating::Rating() :promote(0), safe_convert(0), unsafe_convert(0) { }
+Rating::Rating() :promote(0), safe_convert(0), unsafe_convert(0), no_convert(0) { }
 
 void Rating::bad() {
     // Max out everything
     promote = -1;
     safe_convert = -1;
     unsafe_convert = -1;
+    no_convert = -1;
 }
 
 bool Rating::operator < (const Rating &other) const {
     unsigned short self[] = {unsafe_convert,
                              safe_convert,
-                             promote};
+                             promote,
+                             no_convert};
     unsigned short that[] = {other.unsafe_convert,
                              other.safe_convert,
-                             other.promote};
+                             other.promote,
+                             other.no_convert};
     for(int i = 0; i < sizeof(self)/sizeof(unsigned short); ++i) {
         if (self[i] < that[i]) return true;
     }
@@ -213,7 +222,7 @@ bool Rating::operator < (const Rating &other) const {
 
 bool Rating::operator == (const Rating &other) const {
     return promote == other.promote && safe_convert == other.safe_convert &&
-           unsafe_convert == other.unsafe_convert;
+           unsafe_convert == other.unsafe_convert && no_convert == other.no_convert;
 }
 
 

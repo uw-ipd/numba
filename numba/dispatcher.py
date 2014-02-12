@@ -20,6 +20,15 @@ class Overloaded(_dispatcher.Dispatcher):
     def __init__(self, py_func, locals={}, targetoptions={}):
         self.tm = default_type_manager
 
+        if 'forceobj' in targetoptions and targetoptions['forceobj'] == True:
+            print('xxx')
+            grp_signed = (types.int8, types.int16, types.int32, types.int64)
+            grp_unsigned = (types.uint8, types.uint16, types.uint32, types.uint64)
+            for t in grp_signed:
+                self.tm.set_safe_convert(t, types.pyobject)
+            for t in grp_unsigned:
+                self.tm.set_safe_convert(t, types.pyobject)
+
         argspec = inspect.getargspec(py_func)
         argct = len(argspec.args)
 

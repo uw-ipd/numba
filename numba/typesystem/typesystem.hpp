@@ -28,7 +28,6 @@ struct Type : Atom {
     void addTrait(const Trait *trait);
 };
 
-
 template<class T>
 class AtomContext {
 public:
@@ -148,15 +147,16 @@ public:
     AtomContext<Trait> traits;
     AtomContext<Type> types;
 
+    // type compatibility
     void setCompatibility(const Type *from, const Type *to,
                           TypeCompatibleCode tcc);
 
     TypeCompatibleCode getCompatibility(const Type *from,
                                         const Type *to) const;
 
-
     std::string explainCompatibility(const Type *from, const Type *to) const;
 
+    // type ranking for machines types
     void appendRank(const Type* type);
     int getRank(const Type* type) const;
 
@@ -172,6 +172,29 @@ private:
 std::string explainCompatibility(TypeCompatibleCode tcc);
 
 void fillMachineTypes(TypeContext &ctx);
+
+struct CoerceDescriptor{
+    bool okay;
+    bool safe;
+    Type *type;
+};
+
+CoerceDescriptor coerce(TypeContext &ctx, Type** typeset, size_t n);
+CoerceDescriptor coerce(TypeContext &ctx, Type** typeset, size_t n);
+
+std::string explainCoerce(CoerceDescriptor cd);
+
+/*
+Select compatible overload versions.
+*/
+int selectOverload(TypeContext &ctx, Type* sig[], Type* overloads[],
+                   int selected[], int nvers, int nargs);
+
+/*
+Select the best overload version with asymmetric resolution (left to right).
+*/
+int selectBestOverload(TypeContext &ctx, Type* sig[], Type* overloads[],
+                       int nvers, int nargs);
 
 
 } // namespace numba

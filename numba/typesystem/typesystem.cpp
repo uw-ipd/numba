@@ -1,8 +1,8 @@
 #include "typesystem.hpp"
+#include "MurmurHash3.h"    // public domain
 #include <sstream>
 
-// Uses MIT licensed Murmur Hash
-unsigned int MurmurHash2(const void * key, int len, unsigned int seed);
+enum {HASHSEED = 0xabcdef};
 
 namespace numba {
 
@@ -22,7 +22,9 @@ unsigned int hash(const TypePair &key) {
     pair.a = reinterpret_cast<size_t>(key.first);
     pair.b = reinterpret_cast<size_t>(key.second);
 
-    return MurmurHash2(&pair, sizeof(pair), 0xabcdef);
+    uint32_t hash;
+    MurmurHash3_x86_32(&pair, sizeof(pair), HASHSEED, &hash);
+    return hash;
 }
 
 unsigned int hash(const Type* key) {
@@ -32,7 +34,9 @@ unsigned int hash(const Type* key) {
 
     raw.ptr = key;
 
-    return MurmurHash2(&raw, sizeof(raw), 0xabcdef);
+    uint32_t hash;
+    MurmurHash3_x86_32(&raw, sizeof(raw), HASHSEED, &hash);
+    return hash;
 }
 
 void

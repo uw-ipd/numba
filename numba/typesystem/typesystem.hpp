@@ -180,7 +180,6 @@ struct CoerceDescriptor{
 };
 
 CoerceDescriptor coerce(TypeContext &ctx, Type** typeset, size_t n);
-CoerceDescriptor coerce(TypeContext &ctx, Type** typeset, size_t n);
 
 std::string explainCoerce(CoerceDescriptor cd);
 

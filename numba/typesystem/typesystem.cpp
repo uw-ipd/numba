@@ -1,6 +1,7 @@
 #include "typesystem.hpp"
 #include "MurmurHash3.h"    // public domain
 #include <sstream>
+#include <iostream>
 #include <limits>
 
 enum {HASHSEED = 0xabcdef};
@@ -221,18 +222,21 @@ CoerceDescriptor coerce(TypeContext &ctx, Type** typeset, size_t n){
     for(size_t i = 0; i < n; ++i) {
         size_t goodct = 0;
         for(size_t j = 0; j < n; ++j) {
-            CastDescriptor howcast = ctx.cast(typeset[i], typeset[j]);
-            if (howcast.tcc == TCC_EXACT || howcast.tcc == TCC_PROMOTE) {
-                goodct += 1;
-            } else if (howcast.tcc == TCC_FALSE) {
-                return howcoerce;
+            if (i != j) {
+                CastDescriptor howcast = ctx.cast(typeset[j], typeset[i]);
+                if (howcast.tcc == TCC_EXACT || howcast.tcc == TCC_PROMOTE) {
+                    goodct += 1;
+                } else if (howcast.tcc == TCC_FALSE) {
+                    return howcoerce;
+                }
             }
         }
 
-        if (goodct == n) {
+        if (goodct == n - 1) {
             howcoerce.okay = true;
             howcoerce.safe = true;
             howcoerce.type = typeset[i];
+            break;
         }
     }
 
@@ -378,10 +382,14 @@ int selectBestOverload(TypeContext &ctx, Type* sig[], Type* overloads[],
     for(int j = 0; j < nargs; ++j) {
         // Collect cast description
         int i = 0;
-        CastDescriptor cd = ctx.cast(overloads[selected[i] * nargs + j],
-                                     sig[j]);
+        CastDescriptor bestcast = ctx.cast(overloads[selected[i] * nargs + j],
+                                           sig[j]);
+
         for(i = 1; i < ct; ++i) {
+            CastDescriptor cd = ctx.cast(overloads[selected[i] * nargs + j],
+                                         sig[j]);
             int cmp = compareCast(cd, bestcast);
+
             if (cmp < 0) {
                 bestcast = cd;
                 selptr = selected;

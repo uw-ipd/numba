@@ -71,8 +71,18 @@ ext_npyufunc_ufunc = Extension(name="numba.npyufunc._internal",
 ext_mviewbuf = Extension(name='numba.mviewbuf',
                          sources=['numba/mviewbuf.c'])
 
+ext_typesystem = Extension(name='numba.typesystem._typesystem',
+                           sources=['numba/typesystem/typesystem.cpp',
+                                    'numba/typesystem/_typesystem.cpp',
+                                    'numba/typesystem/MurmurHash3.cpp'],
+                           depends=['numba/_pymodule.h',
+                                    'numba/typesystem/typesystem.hpp'],
+                           include_dirs=['numba/typesystem',
+                                         'numba'])
+
 ext_modules = [ext_dynfunc, ext_numpyadapt, ext_npymath_exports, ext_dispatcher,
-               ext_helperlib, ext_typeconv, ext_npyufunc_ufunc, ext_mviewbuf]
+               ext_helperlib, ext_typeconv, ext_npyufunc_ufunc, ext_mviewbuf,
+               ext_typesystem]
 
 packages = [
     "numba",
@@ -80,6 +90,7 @@ packages = [
     "numba.tests",
     "numba.typing",
     "numba.typeconv",
+    "numba.typesystem",
     "numba.npyufunc",
     "numba.pycc",
     "numba.servicelib",
@@ -88,6 +99,7 @@ packages = [
     "numba.cuda.tests",
     "numba.cuda.tests.cudadrv",
     "numba.cuda.tests.cudapy",
+
 ]
 
 setup(name='numba',

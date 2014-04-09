@@ -7,6 +7,7 @@ from collections import namedtuple
 
 UnaryOperation = datatype('UnaryOperation', ['operand', 'op', 'op_str'])
 BinaryOperation = datatype('BinaryOperation', ['lhs', 'rhs', 'op', 'op_str'])
+ScalarConstant = datatype('ScalarConstant', ['value'])
 
 
 def unary_op(op, op_str):
@@ -25,7 +26,7 @@ def binary_op(op, op_str):
     def wrapper(func):
         def impl(self, other):
             if not isinstance(other, Array):
-                other = Array(other)
+                other = ScalarConstant(other)
             return Array(operation=BinaryOperation(self, other, op, op_str))
 
         return impl
@@ -69,15 +70,6 @@ class Array(namedtuple('Array', ['data', 'operation'])):
     def __getitem__(self, other):
         pass
 
-    def __setitem__(self, key, value):
-        if not isinstance(key, Array):
-            key = Array(data=key)
-        if not isinstance(value, Array):
-            value = Array(data=value)
-
-    def copy(self):
-        pass
-        
 
 @unary_op(np.abs, 'abs')
 def numba_abs(operand):
@@ -93,6 +85,10 @@ class Value(Case):
         else:
             return Value(operation)
 
+    @of('ScalarConstant(value)')
+    def scalar_constant(self, value):
+        return value
+
     @of('UnaryOperation(operand, op, op_str)')
     def unary_operation(self, operand, op, op_str):
         return op(Value(operand))
@@ -107,24 +103,31 @@ class CodeGen(Case):
     @of('Array(data, operation)')
     def array(self, data, operation):
         if data is not None:
-            return str(data)
+            self.state['count'] += 1
+            return 'x' + str(self.state['count'])
         else:
-            return str(CodeGen(operation))
+            return CodeGen(operation, state=self.state)
+
+    @of('ScalarConstant(value)')
+    def scalar_constant(self, value):
+        return str(value)
 
     @of('UnaryOperation(operand, op, op_str)')
     def unary_operation(self, operand, op, op_str):
-        print op, CodeGen(operand)
+        return op_str + '(' +  CodeGen(operand, state=self.state) + ')'
 
     @of('BinaryOperation(lhs, rhs, op, op_str)')
     def binary_operation(self, lhs, rhs, op, op_str):
-        print op, CodeGen(lhs), CodeGen(rhs)
+        return op_str + '(' + CodeGen(lhs, state=self.state) + ',' + CodeGen(rhs, state=self.state) + ')'
 
 
 if __name__ == '__main__':
 
     a1 = Array(data=np.arange(-10,10))
     a2 = Array(data=np.arange(-10,10))
+
     result = a1**2 + numba_abs(a2)
-    #CodeGen(result)
-    print result
+
+    print CodeGen(result, state={'count': 0})
+    #print result
 

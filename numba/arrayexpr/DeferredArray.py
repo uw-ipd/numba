@@ -1,5 +1,6 @@
 import numpy as np
 import operator
+import math
 from pylab import imshow, show
 from alge import Case, of, datatype
 from collections import namedtuple
@@ -77,12 +78,20 @@ class DeferredArray(object):
         pass
 
     def __setitem__(self, key, value):
+        if isinstance(value, DeferredArray):
+            value = value.array_node
+        else:
+            value = ScalarConstantNode(value)
         self.array_node = ArrayNode(data=None,
-            operation=ArrayAssignOperation(self.array_node, key, value.array_node))
+            operation=ArrayAssignOperation(self.array_node, key, value))
 
 
-@unary_op(np.abs, 'abs')
+@unary_op(abs, 'abs')
 def numba_abs(operand):
+    pass
+
+@unary_op(math.log, 'math.log')
+def numba_log(operand):
     pass
 
 
@@ -172,17 +181,17 @@ def test_mandelbrot():
 
     c = DeferredArray(data = x + 1j*y)
     #z = c.copy()
-    z = DefferedArray(data = x + 1j*y)
+    z = DeferredArray(data = x + 1j*y)
 
     image = DeferredArray(data = np.zeros((height, width)))
 
     for i in range(num_iterations):
 
-        indices = (np.abs(z) <= 10)
+        indices = (numba_abs(z) <= 10)
         z[indices] = (z[indices] ** 2) + c[indices]
         image[indices] = i
 
-    imgplot = imshow(np.log(image))
+    imgplot = imshow(numba_log(image))
     show()
 
 

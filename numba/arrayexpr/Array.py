@@ -7,14 +7,17 @@ from collections import namedtuple
 
 UnaryOperation = datatype('UnaryOperation', ['operand', 'op', 'op_str'])
 BinaryOperation = datatype('BinaryOperation', ['lhs', 'rhs', 'op', 'op_str'])
-ScalarConstant = datatype('ScalarConstant', ['value'])
+ArrayAssignOperation = datatype('ArrayAssignOperation', ['operand', 'key', 'value'])
+ArrayNode = datatype('ArrayNode', ['data', 'operation'])
+ScalarConstantNode = datatype('ScalarConstantNodeNode', ['value'])
 
 
 def unary_op(op, op_str):
     
     def wrapper(func):
         def impl(self):
-            return Array(operation=UnaryOperation(self, op, op_str))
+            return DeferredArray(data=None,
+                operation=UnaryOperation(self.array_node, op, op_str))
 
         return impl
 
@@ -25,22 +28,25 @@ def binary_op(op, op_str):
     
     def wrapper(func):
         def impl(self, other):
-            if not isinstance(other, Array):
-                other = ScalarConstant(other)
-            return Array(operation=BinaryOperation(self, other, op, op_str))
+            if isinstance(other, DeferredArray):
+                other = other.array_node
+            else:
+                other = ScalarConstantNode(other)
+            return DeferredArray(data=None,
+                operation=BinaryOperation(self.array_node, other, op, op_str))
 
         return impl
 
     return wrapper
 
 
-class Array(namedtuple('Array', ['data', 'operation'])):
+class DeferredArray(object):
 
-    def __new__(cls, data=None, operation=None):
-        return super(Array, cls).__new__(cls, data, operation)
+    def __init__(self, data=None, operation=None):
+        self.array_node = ArrayNode(data=data, operation=operation)
 
     def __str__(self):
-        return str(Value(self))
+        return str(Value(self.array_node))
     
     @binary_op(operator.add, 'operator.add')
     def __add__(self, other):
@@ -70,6 +76,10 @@ class Array(namedtuple('Array', ['data', 'operation'])):
     def __getitem__(self, other):
         pass
 
+    def __setitem__(self, key, value):
+        self.array_node = ArrayNode(data=None,
+            operation=ArrayAssignOperation(self.array_node, key, value.array_node))
+
 
 @unary_op(np.abs, 'abs')
 def numba_abs(operand):
@@ -78,14 +88,14 @@ def numba_abs(operand):
 
 class Value(Case):
 
-    @of('Array(data, operation)')
+    @of('ArrayNode(data, operation)')
     def array(self, data, operation):
         if data is not None:
             return data
         else:
             return Value(operation)
 
-    @of('ScalarConstant(value)')
+    @of('ScalarConstantNode(value)')
     def scalar_constant(self, value):
         return value
 
@@ -97,10 +107,15 @@ class Value(Case):
     def binary_operation(self, lhs, rhs, op, op_str):
         return op(Value(lhs), Value(rhs))
 
+    @of('ArrayAssignOperation(operand, key, value)')
+    def array_assign_operation(self, operand, key, value):
+        operator.setitem(Value(operand), key, Value(value))
+        return Value(operand)
+
 
 class CodeGen(Case):
 
-    @of('Array(data, operation)')
+    @of('ArrayNode(data, operation)')
     def array(self, data, operation):
         if data is not None:
             self.state['count'] += 1
@@ -108,7 +123,7 @@ class CodeGen(Case):
         else:
             return CodeGen(operation, state=self.state)
 
-    @of('ScalarConstant(value)')
+    @of('ScalarConstantNode(value)')
     def scalar_constant(self, value):
         return str(value)
 
@@ -118,7 +133,28 @@ class CodeGen(Case):
 
     @of('BinaryOperation(lhs, rhs, op, op_str)')
     def binary_operation(self, lhs, rhs, op, op_str):
-        return op_str + '(' + CodeGen(lhs, state=self.state) + ',' + CodeGen(rhs, state=self.state) + ')'
+        return op_str + '(' + CodeGen(lhs, state=self.state) + ',' + \
+            CodeGen(rhs, state=self.state) + ')'
+
+
+def test1():
+
+    a1 = DeferredArray(data=np.arange(-10,10))
+    a2 = DeferredArray(data=np.arange(-10,10))
+
+    result = a1**2 + numba_abs(a2)
+
+    print result
+    print CodeGen(result.array_node, state={'count': 0})
+
+
+def test2():
+
+    a = DeferredArray(data=np.arange(-10,10))
+
+    a[:] = a + a
+
+    print a
 
 
 def test_mandelbrot():
@@ -134,11 +170,11 @@ def test_mandelbrot():
     x, y = np.meshgrid(np.linspace(x_min, x_max, width),
                        np.linspace(y_min, y_max, height))
 
-    c = Array(data = x + 1j*y)
+    c = DeferredArray(data = x + 1j*y)
     #z = c.copy()
-    z = Array(data = x + 1j*y)
+    z = DefferedArray(data = x + 1j*y)
 
-    image = Array(data = np.zeros((height, width)))
+    image = DeferredArray(data = np.zeros((height, width)))
 
     for i in range(num_iterations):
 
@@ -150,17 +186,7 @@ def test_mandelbrot():
     show()
 
 
-def test1():
-
-    a1 = Array(data=np.arange(-10,10))
-    a2 = Array(data=np.arange(-10,10))
-
-    result = a1**2 + numba_abs(a2)
-
-    print result
-    print CodeGen(result, state={'count': 0})
-
-
 if __name__ == '__main__':
     test1()
+    test2()
 

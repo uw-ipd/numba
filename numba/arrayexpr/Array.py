@@ -121,13 +121,46 @@ class CodeGen(Case):
         return op_str + '(' + CodeGen(lhs, state=self.state) + ',' + CodeGen(rhs, state=self.state) + ')'
 
 
-if __name__ == '__main__':
+def test_mandelbrot():
+
+    width = 900
+    height = 600
+    x_min = -2.0
+    x_max = 1.0
+    y_min = -1.0
+    y_max = 1.0
+    num_iterations = 20
+
+    x, y = np.meshgrid(np.linspace(x_min, x_max, width),
+                       np.linspace(y_min, y_max, height))
+
+    c = Array(data = x + 1j*y)
+    #z = c.copy()
+    z = Array(data = x + 1j*y)
+
+    image = Array(data = np.zeros((height, width)))
+
+    for i in range(num_iterations):
+
+        indices = (np.abs(z) <= 10)
+        z[indices] = (z[indices] ** 2) + c[indices]
+        image[indices] = i
+
+    imgplot = imshow(np.log(image))
+    show()
+
+
+def test1():
 
     a1 = Array(data=np.arange(-10,10))
     a2 = Array(data=np.arange(-10,10))
 
     result = a1**2 + numba_abs(a2)
 
+    print result
     print CodeGen(result, state={'count': 0})
-    #print result
+
+
+if __name__ == '__main__':
+    test1()
 

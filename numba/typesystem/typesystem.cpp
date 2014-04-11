@@ -375,7 +375,6 @@ int selectBestOverload(TypeContext &ctx, Type* sig[], Type* overloads[],
     // Otherwise perform conflict resolution
     int samect = 0;
     int *selptr = selected;
-    CastDescriptor bestcast;
 
     // Select asymmetrically with the left most argument being the most
     // important

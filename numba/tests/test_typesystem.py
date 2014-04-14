@@ -16,7 +16,7 @@ class TestTypeSystem(unittest.TestCase):
         int32 = context.get_type('int32')
         float32 = context.get_type('float32')
         int32_to_float32 = context.cast(int32, float32)
-        self.assertTrue(int32_to_float32.is_coerce)
+        self.assertTrue(int32_to_float32.is_convert)
         self.assertFalse(int32_to_float32.is_exact)
         self.assertFalse(int32_to_float32.is_promote)
         self.assertTrue(int32_to_float32.distance > 0)
@@ -42,6 +42,17 @@ class TestTypeSystem(unittest.TestCase):
         vers = ver0, ver1
         self.assertEqual(context.resolve(sig, vers), vers)
         self.assertEqual(context.best_resolve(sig, vers), ver0)
+
+    def test_set_compat_overide(self):
+        context = typesystem.TypeContext()
+
+        int32 = context.get_type('int32')
+        float32 = context.get_type('float32')
+
+        self.assertTrue(context.cast(int32, float32).is_convert)
+        context.set_compat(int32, float32, "promote")
+        self.assertTrue(context.cast(int32, float32).is_promote)
+
 
 if __name__ == '__main__':
     unittest.main()

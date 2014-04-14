@@ -2,7 +2,6 @@
 #include "capsulethunk.h"
 #include "typesystem.hpp"
 
-
 const char PYCAP_TYPECONTEXT[] = "numba::TypeContext";
 const char PYCAP_TYPE[] = "numba::Type";
 
@@ -20,6 +19,7 @@ PyObject* coerce(PyObject *self, PyObject *args);
 PyObject* cast(PyObject *self, PyObject *args);
 PyObject* select_overload(PyObject *self, PyObject *args);
 PyObject* select_best_overload(PyObject *self, PyObject *args);
+PyObject* set_compat(PyObject *self, PyObject *args);
 
 static PyMethodDef ext_methods[] = {
 #define declmethod(func) { #func , ( PyCFunction )func , METH_VARARGS , NULL }
@@ -32,6 +32,7 @@ static PyMethodDef ext_methods[] = {
     declmethod(cast),
     declmethod(select_overload),
     declmethod(select_best_overload),
+    declmethod(set_compat),
     { NULL },
 #undef declmethod
 };
@@ -260,4 +261,32 @@ PyObject* select_best_overload(PyObject *self, PyObject *args) {
         Py_RETURN_NONE;
     }
     return PyLong_FromLong(selct);
+}
+
+PyObject* set_compat(PyObject *self, PyObject *args) {
+    PyObject *ctx, *tyfrom, *tyto;
+    char *compat;
+
+    if (!PyArg_ParseTuple(args, "OOOs", &ctx, &tyfrom, &tyto, &compat)) {
+        return NULL;
+    }
+
+    TypeCompatibleCode tcc;
+    if (strcmp("false", compat) == 0) {
+        tcc = TCC_FALSE;
+    } else if (strcmp("exact", compat) == 0) {
+        tcc = TCC_EXACT;
+    } else if (strcmp("promote", compat) == 0) {
+        tcc = TCC_PROMOTE;
+    } else if (strcmp("convert", compat) == 0) {
+        tcc = TCC_CONVERT;
+    } else {
+        PyErr_SetString(PyExc_ValueError, "Invalid type compatibility.");
+        return NULL;
+    }
+
+    unwrap_typecontext(ctx)->setCompatibility(unwrap_type(tyfrom),
+                                              unwrap_type(tyto), tcc);
+
+    Py_RETURN_NONE;
 }

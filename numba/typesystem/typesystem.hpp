@@ -6,6 +6,7 @@
 #include <vector>
 #include <string>
 #include <algorithm>
+//#include <iostream>
 
 namespace numba {
 
@@ -88,20 +89,20 @@ public:
     void insert(Tkey key, Tval val) {
         unsigned int i = hash(key) % Tsize;
         hash_bin_type &bin = records[i];
-        record_type data;
-        data.first = key;
-        data.second = val;
+        count += 1;
         for (size_t j = 0; j < bin.size(); ++j) {
             if (bin[j].first == key) {
                 bin[j].second = val;
                 return;
             }
         }
+        record_type data;
+        data.first = key;
+        data.second = val;
         bin.push_back(data);
         // Sort the bin
         // Allow for slow insert but fast search
         std::sort(bin.begin(), bin.end());
-        count += 1;
     }
 
     find_type find(Tkey key) const {

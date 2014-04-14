@@ -52,6 +52,9 @@ class TypeContext(object):
         finalty, safe = _typesystem.coerce(self.handle, types)
         return Type(self, finalty), safe
 
+    def set_compat(self, fromty, toty, tcc):
+        _typesystem.set_compat(self.handle, fromty.handle, toty.handle, tcc)
+
 
 class CastDesc(object):
     cast_kinds = 'exact', 'promote', 'convert', 'false'
@@ -73,13 +76,13 @@ class CastDesc(object):
         return self.kind != 'false'
 
     def __repr__(self):
-        if self.is_coerce:
-            return "<cast by=%s distance=%d>" % (self.kind, self.dist)
+        if self.is_convert:
+            return "<cast by=%s distance=%d>" % (self.kind, self.distance)
         else:
             return "<cast by=%s>" % (self.kind,)
 
     @property
-    def is_coerce(self):
+    def is_convert(self):
         return self.kind == "convert"
 
     @property

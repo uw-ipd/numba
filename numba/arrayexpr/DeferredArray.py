@@ -16,7 +16,7 @@ ScalarConstantNode = datatype('ScalarConstantNodeNode', ['value'])
 
 
 def unary_op(op, op_str):
-    
+
     def wrapper(func):
         def impl(self):
             return DeferredArray(data=UnaryOperation(self.array_node, op, op_str))
@@ -27,7 +27,7 @@ def unary_op(op, op_str):
 
 
 def binary_op(op, op_str):
-    
+
     def wrapper(func):
         def impl(self, other):
             if isinstance(other, DeferredArray):
@@ -48,15 +48,15 @@ class DeferredArray(object):
             data = ArrayDataNode(array_data=data)
         self._ref = weakref.ref(self)
         self.array_node = ArrayNode(data=data, owners=set([self._ref]))
-        self.data = None
 
     def __del__(self):
         self.array_node.owners.discard(self._ref)
 
     def __get_data(self):
-        if self.data is None:
-            self.data = Value(self.array_node)
-        return self.data
+        if not isinstance(self.array_node.data, ArrayDataNode):
+            data = Value(self.array_node)
+            self.array_node.data = ArrayDataNode(data)
+        return self.array_node.data.array_data
 
     def __str__(self):
         return str(self.__get_data())
@@ -210,11 +210,15 @@ def test1():
 
     a1 = DeferredArray(data=np.arange(-10,10))
     a2 = DeferredArray(data=np.arange(-10,10))
-
     result = a1**2 + numba_abs(a2)
 
     print result.__repr__()
+    print CodeGen(result.array_node, state={'count': 0})
+
+    # Force
     print result
+
+    print result.__repr__()
     print CodeGen(result.array_node, state={'count': 0})
 
 

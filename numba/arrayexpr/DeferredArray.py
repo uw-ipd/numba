@@ -233,12 +233,12 @@ def test2():
 
 def test3():
 
-    a = DeferredArray(data=np.arange(10))
+    a = DeferredArray()
+    b = DeferredArray()
 
-    b = a + a
-    c = b + b
+    deferred_result = a + b
 
-    print c
+    manifested_result = deferred_result(np.arange(10, np.arange(10))
 
 
 def test_mandelbrot():

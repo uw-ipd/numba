@@ -19,7 +19,7 @@ def unary_op(op, op_str):
 
     def wrapper(func):
         def impl(self):
-            return DeferredArray(data=UnaryOperation(self.array_node, op, op_str))
+            return Array(data=UnaryOperation(self.array_node, op, op_str))
 
         return impl
 
@@ -30,18 +30,18 @@ def binary_op(op, op_str):
 
     def wrapper(func):
         def impl(self, other):
-            if isinstance(other, DeferredArray):
+            if isinstance(other, Array):
                 other = other.array_node
             else:
                 other = ScalarConstantNode(other)
-            return DeferredArray(data=BinaryOperation(self.array_node, other, op, op_str))
+            return Array(data=BinaryOperation(self.array_node, other, op, op_str))
 
         return impl
 
     return wrapper
 
 
-class DeferredArray(object):
+class Array(object):
 
     def __init__(self, data=None):
         if isinstance(data, np.ndarray):
@@ -52,14 +52,14 @@ class DeferredArray(object):
     def __del__(self):
         self.array_node.owners.discard(self._ref)
 
-    def __get_data(self):
+    def get_data(self):
         if not isinstance(self.array_node.data, ArrayDataNode):
             data = Value(self.array_node)
             self.array_node.data = ArrayDataNode(data)
         return self.array_node.data.array_data
 
     def __str__(self):
-        return str(self.__get_data())
+        return str(self.get_data())
 
     def __repr__(self):
         return Repr(self.array_node, state={'level':0})
@@ -93,7 +93,7 @@ class DeferredArray(object):
         pass
 
     def __setitem__(self, key, value):
-        if isinstance(value, DeferredArray):
+        if isinstance(value, Array):
             value = value.array_node
         else:
             value = ScalarConstantNode(value)
@@ -108,6 +108,9 @@ def numba_abs(operand):
 @unary_op(math.log, 'math.log')
 def numba_log(operand):
     pass
+
+def sum(array):
+    return np.sum(array.get_data())
 
 
 class Value(Case):
@@ -190,7 +193,10 @@ class CodeGen(Case):
     @of('ArrayDataNode(array_data)')
     def array_data_node(self, array_data):
         self.state['count'] += 1
-        return 'x' + str(self.state['count'])
+        var_str = 'x' + str(self.state['count'])
+        self.state['inputs'].append(var_str)
+        self.state['input_types'].append(str(array_data.dtype))
+        return var_str
 
     @of('ScalarConstantNode(value)')
     def scalar_constant(self, value):
@@ -208,8 +214,8 @@ class CodeGen(Case):
 
 def test1():
 
-    a1 = DeferredArray(data=np.arange(-10,10))
-    a2 = DeferredArray(data=np.arange(-10,10))
+    a1 = Array(data=np.arange(-10,10))
+    a2 = Array(data=np.arange(-10,10))
     result = a1**2 + numba_abs(a2)
 
     print result.__repr__()
@@ -224,21 +230,28 @@ def test1():
 
 def test2():
 
-    a = DeferredArray(data=np.arange(10))
+    a = Array(data=np.arange(10))
+    b = Array(data=np.arange(10))
 
-    a[:] = a + a
-
-    print a
+    c = a + b
+    print c.__repr__()
+    inputs = []
+    input_types = []
+    print CodeGen(c.array_node, state={'count':0, 'inputs':inputs, 'input_types':input_types})
+    print inputs
+    print input_types
+    print c
+    print c.__repr__()
 
 
 def test3():
 
-    a = DeferredArray()
-    b = DeferredArray()
+    a = Array()
+    b = Array()
 
     deferred_result = a + b
 
-    manifested_result = deferred_result(np.arange(10, np.arange(10))
+    #manifested_result = deferred_result(np.arange(10, np.arange(10))
 
 
 def test_mandelbrot():
@@ -254,11 +267,11 @@ def test_mandelbrot():
     x, y = np.meshgrid(np.linspace(x_min, x_max, width),
                        np.linspace(y_min, y_max, height))
 
-    c = DeferredArray(data = x + 1j*y)
+    c = Array(data = x + 1j*y)
     #z = c.copy()
-    z = DeferredArray(data = x + 1j*y)
+    z = Array(data = x + 1j*y)
 
-    image = DeferredArray(data = np.zeros((height, width)))
+    image = Array(data = np.zeros((height, width)))
 
     for i in range(num_iterations):
 
@@ -271,5 +284,5 @@ def test_mandelbrot():
 
 
 if __name__ == '__main__':
-    test1()
+    test2()
 

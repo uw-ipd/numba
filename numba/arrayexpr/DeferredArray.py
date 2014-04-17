@@ -5,6 +5,7 @@ import weakref
 from pylab import imshow, show
 from alge import Case, of, datatype
 from collections import namedtuple
+import time
 
 
 UnaryOperation = datatype('UnaryOperation', ['operand', 'op', 'op_str'])
@@ -193,9 +194,10 @@ class CodeGen(Case):
     @of('ArrayDataNode(array_data)')
     def array_data_node(self, array_data):
         self.state['count'] += 1
-        var_str = 'x' + str(self.state['count'])
-        self.state['inputs'].append(var_str)
-        self.state['input_types'].append(str(array_data.dtype))
+        var_str = 'x' + str(id(array_data))
+        if not var_str in self.state['inputs']:
+            self.state['inputs'].append(var_str)
+            self.state['input_types'].append(str(array_data.dtype))
         return var_str
 
     @of('ScalarConstantNode(value)')
@@ -230,28 +232,43 @@ def test1():
 
 def test2():
 
-    a = Array(data=np.arange(10))
-    b = Array(data=np.arange(10))
+    a = Array(data=np.arange(100))
+    b = Array(data=np.arange(100))
 
-    c = a + b
+    c = a + b + a*2 + b*3
+
     print c.__repr__()
+
     inputs = []
     input_types = []
-    print CodeGen(c.array_node, state={'count':0, 'inputs':inputs, 'input_types':input_types})
-    print inputs
-    print input_types
-    print c
+    body = CodeGen(c.array_node, state={'count':0, 'inputs':inputs, 'input_types':input_types})
+    from numba import vectorize
+    func = '''
+def foo({0}):
+    return {1}
+'''.format(','.join(inputs), body)
+    print func
+
+    code = compile(func, '<string>', 'exec')
+
+    exec(code, globals())
+
+    foo = globals()['foo']
+
+    ufunc = vectorize('(' + ','.join(input_types) + ')')(foo)
+
+    t0 = time.time()
+    for i in range(10000):
+        ufunc(a.array_node.data.array_data, b.array_node.data.array_data)
+    print time.time() - t0
+
+    func = lambda x, y: x + y + x*2 + y*3
+    t0 = time.time()
+    for i in range(10000):
+        func(a.array_node.data.array_data, b.array_node.data.array_data)
+    print time.time() - t0
+
     print c.__repr__()
-
-
-def test3():
-
-    a = Array()
-    b = Array()
-
-    deferred_result = a + b
-
-    #manifested_result = deferred_result(np.arange(10, np.arange(10))
 
 
 def test_mandelbrot():

@@ -304,13 +304,29 @@ def native_lowering_stage(targetctx, interp, typemap, restype, calltypes,
         return cfunc, fnptr, lower.module, lower.function, fndesc
 
 
+# def py_lowering_stage(targetctx, interp, nocompile):
+#     # Optimize for python code
+#     ir_optimize_for_py_stage(interp)
+#
+#     fndesc = lowering.describe_pyfunction(interp)
+#     lower = lowering.PyLower(targetctx, fndesc)
+#     lower.lower()
+#
+#     if nocompile:
+#         return None, 0, lower.module, lower.function, fndesc
+#     else:
+#         cfunc, fnptr = targetctx.get_executable(lower.function, fndesc)
+#         return cfunc, fnptr, lower.module, lower.function, fndesc
+
+
 def py_lowering_stage(targetctx, interp, nocompile):
     # Optimize for python code
     ir_optimize_for_py_stage(interp)
 
     fndesc = lowering.describe_pyfunction(interp)
-    lower = lowering.PyLower(targetctx, fndesc)
+    lower = lowering.PyLowerMiniInterp(targetctx, interp, fndesc)
     lower.lower()
+    # print(lower.module)
 
     if nocompile:
         return None, 0, lower.module, lower.function, fndesc

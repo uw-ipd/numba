@@ -1,5 +1,7 @@
 from __future__ import print_function, division, absolute_import
+import dis
 from collections import defaultdict
+import functools
 from llvm.core import Type, Builder, Module
 import llvm.core as lc
 from numba import ir, types, cgutils, utils, config
@@ -64,7 +66,7 @@ def describe_external(name, restype, argtypes):
     fd = FunctionDescriptor(native=True, pymod=None, name=name, doc='',
                             blocks=None, restype=restype, calltypes=None,
                             argtypes=argtypes, args=args, kws=None,
-                            typemap=None, qualname=name, mangler=lambda a,x: a)
+                            typemap=None, qualname=name, mangler=lambda a, x: a)
     return fd
 
 
@@ -86,7 +88,7 @@ def describe_pyfunction(interp):
     native = False
     sortedblocks = utils.SortedMap(utils.dict_iteritems(interp.blocks))
     fd = FunctionDescriptor(native, pymod, fname, doc, sortedblocks,
-                            typemap, restype,  calltypes, args, kws)
+                            typemap, restype, calltypes, args, kws)
     return fd
 
 
@@ -94,6 +96,7 @@ class BaseLower(object):
     """
     Lower IR to LLVM
     """
+
     def __init__(self, context, fndesc):
         self.context = context
         self.fndesc = fndesc
@@ -134,11 +137,11 @@ class BaseLower(object):
             av = self.context.get_argument_value(self.builder, at, av)
             av = self.init_argument(av)
             self.storevar(av, ak)
-        # Init blocks
+            # Init blocks
         for offset in self.fndesc.blocks:
             bname = "B%d" % offset
             self.blkmap[offset] = self.function.append_basic_block(bname)
-        # Lower all blocks
+            # Lower all blocks
         for offset, block in self.fndesc.blocks.items():
             bb = self.blkmap[offset]
             self.builder.position_at_end(bb)
@@ -150,7 +153,7 @@ class BaseLower(object):
         self.builder.branch(self.blkmap[self.firstblk])
 
         if config.DUMP_LLVM:
-            print(("LLVM DUMP %s" % self.fndesc.qualified_name).center(80,'-'))
+            print(("LLVM DUMP %s" % self.fndesc.qualified_name).center(80, '-'))
             print(self.module)
             print('=' * 80)
         self.module.verify()
@@ -369,7 +372,7 @@ class Lower(BaseLower):
             castval = self.context.cast(self.builder, val, ty, fty)
             res = impl(self.builder, (castval,))
             return self.context.cast(self.builder, res, signature.return_type,
-                                    resty)
+                                     resty)
 
         elif expr.op == "getattr":
             val = self.loadvar(expr.value.name)
@@ -423,7 +426,7 @@ class Lower(BaseLower):
 
     def storevar(self, value, name):
         ptr = self.getvar(name)
-        assert value.type == ptr.type.pointee,\
+        assert value.type == ptr.type.pointee, \
             "store %s to ptr of %s" % (value.type, ptr.type.pointee)
         self.builder.store(value, ptr)
 
@@ -437,19 +440,19 @@ class Lower(BaseLower):
 
 
 PYTHON_OPMAP = {
-     '+': "number_add",
-     '-': "number_subtract",
-     '*': "number_multiply",
+    '+': "number_add",
+    '-': "number_subtract",
+    '*': "number_multiply",
     '/?': "number_divide",
-     '/': "number_truedivide",
+    '/': "number_truedivide",
     '//': "number_floordivide",
-     '%': "number_remainder",
+    '%': "number_remainder",
     '**': "number_power",
     '<<': "number_lshift",
     '>>': "number_rshift",
-     '&': "number_and",
-     '|': "number_or",
-     '^': "number_xor",
+    '&': "number_and",
+    '|': "number_or",
+    '^': "number_xor",
 }
 
 
@@ -855,5 +858,568 @@ class PyLower(BaseLower):
 class PyIterState(cgutils.Structure):
     _fields = [
         ("iterator", types.pyobject),
-        ("valid",    types.boolean),
+        ("valid", types.boolean),
     ]
+
+
+def pure(fn):
+    @functools.wraps(fn)
+    def closure(self, inst):
+        key = inst.opname
+        if key not in self.block_cache:
+            bb = self.builder.basic_block
+            fn(self, inst)
+            self.block_cache[key] = bb
+        else:
+            bb = self.block_cache[key]
+            self.builder.branch(bb)
+
+    return closure
+
+
+def pure_by_arg(fn):
+    @functools.wraps(fn)
+    def closure(self, inst):
+        key = inst.opname, inst.arg
+        if key not in self.block_cache:
+            bb = self.builder.basic_block
+            fn(self, inst)
+            self.block_cache[key] = bb
+        else:
+            bb = self.block_cache[key]
+            self.builder.branch(bb)
+
+    return closure
+
+
+class PyLowerMiniInterp(object):
+    def __init__(self, context, interp, fndesc):
+        from numba import interpreter
+
+        assert isinstance(interp, interpreter.Interpreter)
+        self.context = context
+        self.interp = interp
+        self.fndesc = fndesc
+        self.bytecode = interp.bytecode
+        print(self.bytecode.dump())
+
+        self.module = Module.new("module.%s" % self.fndesc.name)
+
+        # Install metadata
+        md_pymod = cgutils.MetadataKeyStore(self.module, "python.module")
+        md_pymod.set(fndesc.pymod.__name__)
+
+        # Setup function
+        self.function = context.declare_function(self.module, fndesc)
+        self.entry_block = self.function.append_basic_block('entry')
+        self.builder = Builder.new(self.entry_block)
+
+        self._ip = self.builder.alloca(Type.int(), name="ip")
+        self.ip = 0
+
+        self.instructions = list(self.bytecode)
+
+        self.switch_block = self.function.append_basic_block('SWITCH')
+
+        self.handler_blocks = [self.function.append_basic_block("OP_%d" % i)
+                               for i in range(len(self.instructions))]
+        self.unhandled_block = self.function.append_basic_block("OP_BAD")
+
+        self.exit_block = self.function.append_basic_block("EXIT")
+
+        # Init
+        self.pyapi = self.context.get_python_api(self.builder)
+        self.global_cache = {}
+        self.block_cache = {}
+
+        pyobj = self.pyapi.pyobj
+
+        # Initialize interpreter states
+        nvars = lc.Constant.int(Type.int(), len(self.bytecode.co_varnames))
+        self.localvars = self.builder.alloca(pyobj, size=nvars, name="vars")
+        self.sp = self.builder.alloca(Type.int(), name="sp")
+        self.builder.store(lc.Constant.int(self.sp.type.pointee, 0), self.sp)
+        # TODO handle stack size allocation correctly
+        self.stacksize = lc.Constant.int(Type.int(), 100)
+        self.stack = self.builder.alloca(pyobj, size=self.stacksize,
+                                         name="stack")
+        self.return_value = self.builder.alloca(pyobj, name='retval')
+
+        # Set all locals to NULL
+        null = lc.Constant.null(pyobj)
+        for var in self.bytecode.co_varnames:
+            self.storevar(null, var, gc=False)
+
+        # Store arguments into locals
+        for arg, argval in zip(self.interp.argspec.args,
+                               self.context.get_arguments(self.function)):
+            self.incref(argval)
+            self.storevar(argval, arg, gc=False)
+
+    def lower(self):
+        self.builder.branch(self.switch_block)
+        self.builder.position_at_end(self.switch_block)
+
+        # Opcode switch
+        swt = self.builder.switch(self.ip, self.unhandled_block,
+                                  n=len(self.instructions))
+        for i in range(len(self.instructions)):
+            swt.add_case(lc.Constant.int(Type.int(), i), self.handler_blocks[i])
+
+        # Unhandled opcode
+        self.builder.position_at_end(self.unhandled_block)
+        self.pyapi.raise_native_error("bad opcode")
+        self.context.return_exc(self.builder)
+
+        # Handle opcode
+        for i, inst in enumerate(self.instructions):
+            self.builder.position_at_end(self.handler_blocks[i])
+            self._lower(inst)
+
+        # Exit block
+        self.builder.position_at_end(self.exit_block)
+        self.epilog()
+        retval = self.builder.load(self.return_value)
+        with cgutils.ifelse(self.builder, self.is_null(retval)) as \
+            (is_exc, is_ret):
+            with is_exc:
+                self.context.return_exc(self.builder)
+
+            with is_ret:
+                self.context.return_value(self.builder, retval)
+
+        self.builder.unreachable()
+
+    def _lower(self, inst):
+        fn = getattr(self, "lower_%s" % inst.opname)
+        fn(inst)
+
+    @pure_by_arg
+    def lower_LOAD_CONST(self, inst):
+        const = self.bytecode.co_consts[inst.arg]
+        if isinstance(const, int):
+            lconst = lc.Constant.int_signextend(self.pyapi.py_ssize_t,
+                                                const)
+            self.push(self.pyapi.long_from_ssize_t(lconst))
+            self.passthrough()
+        elif isinstance(const, str):
+            val = self.pyapi.string_from_string_and_size(const)
+            self.push(val)
+            self.passthrough()
+        else:
+            raise NotImplementedError(inst, const, type(const))
+
+    @pure
+    def lower_POP_TOP(self, inst):
+        tos = self.tos()
+        self.incref(tos)
+        self.push(tos)
+        self.passthrough()
+
+    @pure
+    def lower_DUP_TOP(self, inst):
+        val = self.pop()
+        self.decref(val)
+        self.passthrough()
+
+    @pure_by_arg
+    def lower_LOAD_FAST(self, inst):
+        name = self.bytecode.co_varnames[inst.arg]
+        val = self.loadvar(name)
+        self.incref(val)
+        self.push(val)
+        self.passthrough()
+
+    @pure_by_arg
+    def lower_STORE_FAST(self, inst):
+        name = self.bytecode.co_varnames[inst.arg]
+        val = self.pop()
+        self.storevar(val, name)
+        self.passthrough()
+
+    @pure_by_arg
+    def lower_LOAD_GLOBAL(self, inst):
+        name = self.bytecode.co_names[inst.arg]
+        val = self.load_global_once(name)
+        self.incref(val)
+        self.push(val)
+        self.passthrough()
+
+    @pure_by_arg
+    def lower_LOAD_ATTR(self, inst):
+        attr = self.bytecode.co_names[inst.arg]
+        base = self.pop()
+        res = self.pyapi.object_getattr_string(base, attr)
+        self.decref(base)
+        self.check_error(res)
+        self.push(res)
+
+    @pure
+    def lower_SETUP_LOOP(self, inst):
+        self.passthrough()
+
+    @pure
+    def lower_POP_BLOCK(self, inst):
+        self.passthrough()
+
+    def binary_op(self, fn):
+        rhs = self.pop()
+        lhs = self.pop()
+        result = fn(lhs, rhs)
+        self.decref(lhs)
+        self.decref(rhs)
+        self.check_error(result)
+        self.push(result)
+        self.passthrough()
+
+    @pure
+    def lower_BINARY_ADD(self, inst):
+        self.binary_op(self.pyapi.number_add)
+
+    @pure
+    def lower_BINARY_SUBTRACT(self, inst):
+        self.binary_op(self.pyapi.number_subtract)
+
+    @pure
+    def lower_BINARY_MULTIPLY(self, inst):
+        self.binary_op(self.pyapi.number_multiply)
+
+    @pure
+    def lower_BINARY_DIVIDE(self, inst):
+        self.binary_op(self.pyapi.number_divide)
+
+    @pure
+    def lower_BINARY_TRUE_DIVIDE(self, inst):
+        self.binary_op(self.pyapi.number_truedivide)
+
+    @pure
+    def lower_BINARY_FLOOR_DIVIDE(self, inst):
+        self.binary_op(self.pyapi.number_floordivide)
+
+    @pure
+    def lower_BINARY_MODULO(self, inst):
+        self.binary_op(self.pyapi.number_modulo)
+
+    @pure
+    def lower_BINARY_POWER(self, inst):
+        self.binary_op(self.pyapi.number_power)
+
+    @pure
+    def lower_BINARY_LSHIFT(self, inst):
+        self.binary_op(self.pyapi.number_lshift)
+
+    @pure
+    def lower_BINARY_RSHIFT(self, inst):
+        self.binary_op(self.pyapi.number_rshift)
+
+    @pure
+    def lower_BINARY_AND(self, inst):
+        self.binary_op(self.pyapi.number_and)
+
+    @pure
+    def lower_BINARY_OR(self, inst):
+        self.binary_op(self.pyapi.number_or)
+
+    @pure
+    def lower_BINARY_XOR(self, inst):
+        self.binary_op(self.pyapi.number_xor)
+
+    lower_INPLACE_ADD = lower_BINARY_ADD
+    lower_INPLACE_SUBTRACT = lower_BINARY_SUBTRACT
+    lower_INPLACE_MULTIPLY = lower_BINARY_MULTIPLY
+    lower_INPLACE_DIVIDE = lower_BINARY_DIVIDE
+    lower_INPLACE_TRUE_DIVIDE = lower_BINARY_TRUE_DIVIDE
+    lower_INPLACE_FLOOR_DIVIDE = lower_BINARY_FLOOR_DIVIDE
+    lower_INPLACE_MODULO = lower_BINARY_MODULO
+    lower_INPLACE_POWER = lower_BINARY_POWER
+    lower_INPLACE_LSHIFT = lower_BINARY_LSHIFT
+    lower_INPLACE_RSHIFT = lower_BINARY_RSHIFT
+    lower_INPLACE_AND = lower_BINARY_AND
+    lower_INPLACE_OR = lower_BINARY_OR
+    lower_INPLACE_XOR = lower_BINARY_XOR
+
+    def unary_op(self, fn):
+        val = self.pop()
+        res = fn(val)
+        self.decref(val)
+        self.check_error(res)
+        self.push(res)
+
+    @pure
+    def lower_UNARY_NEGATIVE(self, inst):
+        self.unary_op(self.pyapi.number_negative)
+
+    @pure
+    def lower_UNARY_NOT(self, inst):
+        self.unary_op(self.pyapi.number_not)
+
+    @pure
+    def lower_UNARY_INVERT(self, inst):
+        self.unary_op(self.pyapi.number_invert)
+
+    @pure_by_arg
+    def lower_COMPARE_OP(self, inst):
+        rhs = self.pop()
+        lhs = self.pop()
+        opstr = dis.cmp_op[inst.arg]
+        res = self.object_richcompare(lhs, rhs, opstr)
+        self.decref(lhs)
+        self.decref(rhs)
+        self.check_error(res)
+        self.push(res)
+
+    @pure
+    def lower_RETURN_VALUE(self, inst):
+        val = self.pop()
+        self.exit(val)
+
+    @pure_by_arg
+    def lower_CALL_FUNCTION(self, inst):
+        narg = inst.arg & 0xff
+        nkws = (inst.arg >> 8) & 0xff
+
+        def pop_kws():
+            val = self.pop()
+            key = self.pop()
+            return key, val
+
+        kws = list(reversed([pop_kws() for _ in range(nkws)]))
+        args = list(reversed([self.pop() for _ in range(narg)]))
+        func = self.pop()
+
+        if kws:
+            raise NotImplementedError
+        else:
+            retval = self.pyapi.call_function_objargs(func, args)
+            # clean up
+        for a in args:
+            self.decref(a)
+        for k, v in kws:
+            self.decref(k)
+            self.decref(v)
+        self.decref(func)
+
+        self.check_error(retval)
+        self.push(retval)
+        self.passthrough()
+
+    @pure
+    def lower_GET_ITER(self, inst):
+        val = self.pop()
+        res = self.pyapi.object_getiter(val)
+        self.decref(val)
+        self.check_error(res)
+        self.push(res)
+        self.passthrough()
+
+    def lower_FOR_ITER(self, inst):
+        itobj = self.tos()
+        nextval = self.pyapi.iter_next(itobj)
+        with cgutils.ifelse(self.builder, self.is_null(nextval)) as (then,
+                                                                     alt):
+            with then:
+                self.decref(self.pop())
+                self.jump(inst.get_jump_target())
+
+            with alt:
+                self.push(nextval)
+                self.passthrough()
+
+        self.builder.unreachable()
+
+    def lower_JUMP_ABSOLUTE(self, inst):
+        self.jump(inst.get_jump_target())
+
+    def jump(self, bytecode_offset):
+        for i, inst in enumerate(self.instructions):
+            if inst.offset == bytecode_offset:
+                self.goto(i)
+                return
+        raise AssertionError("unreachable")
+
+    def passthrough(self):
+        self.goto(self.builder.add(self.ip, lc.Constant.int(Type.int(), 1)))
+
+    def clear_locals(self):
+        for name in self.bytecode.co_varnames:
+            self.decref(self.loadvar(name))
+
+    @property
+    def ip(self):
+        return self.builder.load(self._ip)
+
+    @ip.setter
+    def ip(self, ip):
+        if isinstance(ip, int):
+            ip = lc.Constant.int(Type.int(), ip)
+        self.builder.store(ip, self._ip)
+
+    def goto(self, ip):
+        ## Note: Direct Jump? Does not seem to have much effect.
+        # if isinstance(ip, int):
+        #     self.ip = ip
+        #     self.builder.branch(self.handler_blocks[ip])
+        # else:
+        self.ip = ip
+        self.builder.branch(self.switch_block)
+
+    def check_error(self, val):
+        is_null = cgutils.is_null(self.builder, val)
+        with cgutils.if_unlikely(self.builder, is_null):
+            self.raises()
+
+    def storevar(self, value, name, gc=True):
+        offset = self.bytecode.co_varnames.index(name)
+        offset = lc.Constant.int(Type.int(), offset)
+        ptr = self.builder.gep(self.localvars, [offset])
+        orig = self.builder.load(ptr)
+        self.builder.store(value, ptr)
+        if gc:
+            # If the old value is not null, decref
+            is_not_null = cgutils.is_not_null(self.builder, orig)
+            with cgutils.ifthen(self.builder, is_not_null):
+                self.decref(orig)
+
+    def loadvar(self, name):
+        offset = self.bytecode.co_varnames.index(name)
+        offset = lc.Constant.int(Type.int(), offset)
+        ptr = self.builder.gep(self.localvars, [offset])
+        return self.builder.load(ptr)
+
+    def tos(self):
+        sp = self.builder.load(self.sp)
+        nsp = self.builder.sub(sp, lc.Constant.int(Type.int(), 1))
+        ptr = self.builder.gep(self.stack, [nsp])
+        val = self.builder.load(ptr)
+        return val
+
+    def push(self, val):
+        sp = self.builder.load(self.sp)
+        ptr = self.builder.gep(self.stack, [sp])
+        self.builder.store(val, ptr)
+        nsp = self.builder.add(sp, lc.Constant.int(Type.int(), 1))
+        self.builder.store(nsp, self.sp)
+
+    def pop(self):
+        sp = self.builder.load(self.sp)
+        nsp = self.builder.sub(sp, lc.Constant.int(Type.int(), 1))
+        ptr = self.builder.gep(self.stack, [nsp])
+        val = self.builder.load(ptr)
+        self.builder.store(nsp, self.sp)
+        return val
+
+    def unwind(self):
+        sp = self.builder.load(self.sp)
+        with cgutils.for_range(self.builder, sp, sp.type) as idx:
+            ptr = self.builder.gep(self.stack, [idx])
+            val = self.builder.load(ptr)
+            self.decref(val)
+
+    def incref(self, value):
+        self.pyapi.incref(value)
+
+    def decref(self, value):
+        self.pyapi.decref(value)
+
+    def load_global_once(self, name):
+        if name not in self.global_cache:
+            self.global_cache[name] = gv = self.module.add_global_variable(
+                self.pyapi.pyobj, ".global.%s" % name)
+            gv.initializer = lc.Constant.null(gv.type.pointee)
+            gv.linkage = lc.LINKAGE_INTERNAL
+
+        gv = self.global_cache[name]
+
+        val = self.builder.load(gv)
+        with cgutils.if_unlikely(self.builder, self.is_null(val)):
+            val = self.load_global(name)
+            self.builder.store(val, gv)
+
+        return self.builder.load(gv)
+
+    def load_global(self, name):
+        """
+        1) Check global scope dictionary.
+        2) Check __builtins__.
+            2a) is it a dictionary (for non __main__ module)
+            2b) is it a module (for __main__ module)
+        """
+        moddict = self.pyapi.get_module_dict()
+        obj = self.pyapi.dict_getitem_string(moddict, name)
+        self.incref(obj)  # obj is borrowed
+
+        if hasattr(builtins, name):
+            obj_is_null = self.is_null(obj)
+            bbelse = self.builder.basic_block
+
+            with cgutils.ifthen(self.builder, obj_is_null):
+                mod = self.pyapi.dict_getitem_string(moddict, "__builtins__")
+                builtin = self.builtin_lookup(mod, name)
+                bbif = self.builder.basic_block
+
+            retval = self.builder.phi(self.pyapi.pyobj)
+            retval.add_incoming(obj, bbelse)
+            retval.add_incoming(builtin, bbif)
+
+        else:
+            retval = obj
+            with cgutils.if_unlikely(self.builder, self.is_null(retval)):
+                self.pyapi.raise_missing_global_error(name)
+                self.raises()
+
+        self.incref(retval)
+        return retval
+
+    def get_builtin_obj(self, name):
+        moddict = self.pyapi.get_module_dict()
+        mod = self.pyapi.dict_getitem_string(moddict, "__builtins__")
+        return self.builtin_lookup(mod, name)
+
+    def builtin_lookup(self, mod, name):
+        """
+        Args
+        ----
+        mod:
+            The __builtins__ dictionary or module
+        name: str
+            The object to lookup
+        """
+        fromdict = self.pyapi.dict_getitem_string(mod, name)
+        self.incref(fromdict)       # fromdict is borrowed
+        bbifdict = self.builder.basic_block
+
+        with cgutils.if_unlikely(self.builder, self.is_null(fromdict)):
+            # This happen if we are using the __main__ module
+            frommod = self.pyapi.object_getattr_string(mod, name)
+
+            with cgutils.if_unlikely(self.builder, self.is_null(frommod)):
+                self.pyapi.raise_missing_global_error(name)
+                self.return_exception_raised()
+
+            bbifmod = self.builder.basic_block
+
+        builtin = self.builder.phi(self.pyapi.pyobj)
+        builtin.add_incoming(fromdict, bbifdict)
+        builtin.add_incoming(frommod, bbifmod)
+
+        return builtin
+
+    def return_exception_raised(self):
+        self.clear_locals()
+        self.context.return_exc(self.builder)
+
+    def is_null(self, val):
+        return cgutils.is_null(self.builder, val)
+
+    def epilog(self):
+        self.clear_locals()
+        self.unwind()
+
+    def exit(self, retval):
+        self.builder.store(retval, self.return_value)
+        self.builder.branch(self.exit_block)
+
+    def raises(self):
+        self.builder.store(lc.Constant.null(self.return_value.type.pointee),
+                           self.return_value)
+        self.builder.branch(self.exit_block)

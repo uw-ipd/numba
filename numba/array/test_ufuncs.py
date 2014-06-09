@@ -1,3 +1,4 @@
+from __future__ import division
 import numba.unittest_support as unittest
 import numba.array as numbarray
 import numpy as np
@@ -184,16 +185,6 @@ class TestUFuncs(unittest.TestCase):
         # fails with 'il' dtype
         self.binary_ufunc_test(numbarray.arctan2, np.arctan2, 'given', agiven=[-1, +1, +1, -1, 0], bgiven=[-1, -1, +1, +1, 0], types=['i2', 'i4', 'f4', 'f8'], ascalar=180 / numbarray.pi, bscalar=180 / numbarray.pi)
 
-       
-    def test_div(self):
-        a = 180 / numbarray.pi
-        b = 180 / np.pi
-        self.assertTrue(a == b)
-
-    def test_floor_division(self):
-        a = 180 // numbarray.pi
-        b = 180 // np.pi
-        self.assertTrue(a == b)
 
     def test_pi(self):
         self.assertTrue(numbarray.pi == np.pi)
@@ -318,6 +309,28 @@ class TestUFuncs(unittest.TestCase):
 
     def test_binary_subtract_ufunc(self):
         self.binary_ufunc_test(numbarray.subtract, np.subtract, 'arange') 
+    
+    def test_division_operator(self):
+        a = numbarray.arange(10)
+        b = numbarray.arange(10, 20)
+        c = a / b
+        c.eval(debug=True)
+        x = np.arange(10)
+        y = np.arange(10, 20)
+        z = x  / y
+        print 'numba = ', c
+        print 'z = ', z
+        self.assertTrue(np.all(c.eval(use_python=use_python) == z))
+       
+    def test_div(self):
+        a = 180 / numbarray.pi
+        b = 180 / np.pi
+        self.assertTrue(a == b)
+
+    def test_floor_division(self):
+        a = 180 // numbarray.pi
+        b = 180 // np.pi
+        self.assertTrue(a == b)
 
 if __name__ == '__main__':
     unittest.main()

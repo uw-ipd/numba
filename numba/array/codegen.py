@@ -5,7 +5,7 @@ import operator
 import math
 import sys
 import numpy
-
+from numba.config import PYVERSION
 
 # IEEE-754 guarantees that 17 decimal digits are enough to represent any
 # double value in a string representation and convert back to original
@@ -57,6 +57,13 @@ class CodeGen(Case):
         lhs_var = CodeGen(lhs, state=self.state)
         rhs_var = CodeGen(rhs, state=self.state)
         temp_var = 'temp' + str(len(self.state['vectorize_body']))
+#        if op_str == 'operator.div':
+#            if PYVERSION[0] >= 3:
+#                 op_str = 'operator.truediv'
+#            else: 
+#                #handle the from __future__ import division for python 2
+#                if 'division' in globals():
+#                    op_str = 'operator.truediv'        
         self.state['vectorize_body'].append('{0} = {1}({2}, {3})'.format(temp_var, op_str, lhs_var, rhs_var))
         return temp_var
 

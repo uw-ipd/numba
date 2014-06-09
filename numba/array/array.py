@@ -83,7 +83,7 @@ class Array(object):
         return ufuncs.division(self, other)
 
     def __truediv__(self, other):
-        return ufuncs.division(self, other)
+        return ufuncs.truediv(self, other)
 
     def __floordiv__(self, other):
         return ufuncs.floor_division(self, other)

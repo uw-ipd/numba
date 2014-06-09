@@ -93,7 +93,7 @@ for name, op in unary_arithmetic_ufuncs.items():
 
 
 binary_arithmetic_ufuncs = {'add':'operator.add', 'subtract':'operator.sub',
-        'multiply':'operator.mul', 'power':'operator.pow', 'division':'operator.div', 'floor_division':'operator.floordiv'}
+        'multiply':'operator.mul', 'power':'operator.pow', 'division':'operator.div', 'truediv':'operator.truediv'} #, 'division':'operator.div', 'floor_division':'operator.floordiv'}
 
 for name, op in binary_arithmetic_ufuncs.items():
     global_dict[name] = create_binary_op(op)

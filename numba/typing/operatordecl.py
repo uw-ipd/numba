@@ -40,7 +40,7 @@ for op in unary_operators:
     builtin_global(getattr(operator, op), types.Function(op_type))
 
 
-binary_operators = ['add', 'sub', 'mul', 'div', 'floordiv', 'truediv', 'mod', 'pow',
+binary_operators = ['add', 'sub', 'mul', 'div', 'floordiv', 'mod', 'pow',
     'eq', 'ne', 'lt', 'le', 'gt', 'ge', 'and_', 'or_', 'xor',
     'lshift', 'rshift']
 
@@ -48,6 +48,19 @@ for op in binary_operators:
     op_type = type('Operator_' + op, (Operator_binary,), {'key':getattr(operator, op)})
     setattr(OperatorModuleAttribute, 'resolve_' + op,  create_resolve_method(op_type))
     builtin_global(getattr(operator, op), types.Function(op_type))
+
+
+# special case for truediv
+class Operator_truediv(ConcreteTemplate):
+    cases = [
+        signature(types.float64, types.int64, types.int64),
+        signature(types.float64, types.uint64, types.uint64),
+        signature(types.float32, types.float32, types.float32),
+        signature(types.float64, types.float64, types.float64),
+    ]
+op_type = type('Operater_truediv', (Operator_truediv,), {'key':getattr(operator, 'truediv')})
+setattr(OperatorModuleAttribute, 'resolve_truediv', create_resolve_method(op_type))
+builtin_global(getattr(operator, 'truediv'), types.Function(op_type))
 
 
 OperatorModuleAttribute = builtin_attr(OperatorModuleAttribute)

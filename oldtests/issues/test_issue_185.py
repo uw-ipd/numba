@@ -5,7 +5,7 @@
 
 import numpy as np
 from numba import *
-from numba.vectorize import vectorize
+from numba import vectorize
 from math import exp, log1p
 
 

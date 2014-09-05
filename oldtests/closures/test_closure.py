@@ -1,8 +1,5 @@
 import numba
 from numba import *
-from numba.error import NumbaError
-
-autojit = autojit(warn=False, warnstyle='simple')
 
 @autojit
 def error1():
@@ -402,5 +399,5 @@ if __name__ == '__main__':
     # test_closure_outer_locals()
 #    test_call_closure_from_closure()()
     # wrong_restype()
-    import numba
-    numba.testing.testmod()
+    import doctest
+    doctest.testmod()

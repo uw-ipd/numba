@@ -60,10 +60,10 @@ def _for_loop_fn_3 (stop):
                     acc += 1
     return acc
 
-for_loop_fn_0 = autojit(backend='ast')(_for_loop_fn_0)
-for_loop_fn_1 = autojit(backend='ast')(_for_loop_fn_1)
-for_loop_fn_2 = autojit(backend='ast')(_for_loop_fn_2)
-for_loop_fn_3 = autojit(backend='ast')(_for_loop_fn_3)
+for_loop_fn_0 = autojit(_for_loop_fn_0)
+for_loop_fn_1 = autojit(_for_loop_fn_1)
+for_loop_fn_2 = autojit(_for_loop_fn_2)
+for_loop_fn_3 = autojit(_for_loop_fn_3)
 
 # ______________________________________________________________________
 
@@ -93,10 +93,11 @@ class TestForLoop(unittest.TestCase):
         self.assertEqual(result, 81)
 
     def test_compiled_for_loop_fn_many(self):
-        for lo in xrange( -10, 11 ):
-            for hi in xrange( -10, 11 ):
-                for step in xrange( -20, 21 ):
+        for lo in range( -10, 11 ):
+            for hi in range( -10, 11 ):
+                for step in range( -20, 21 ):
                     if step:
+                        print(lo, hi, step)
                         self.assertEqual(for_loop_fn_1(lo, hi, step),
                                          for_loop_fn_1.py_func(lo, hi, step),
                                          'failed for %d/%d/%d' % (lo, hi, step))

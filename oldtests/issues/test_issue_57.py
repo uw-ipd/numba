@@ -3,7 +3,6 @@ from __future__ import print_function, division, absolute_import
 
 import sys
 from numba import *
-from numba.testing import test_support
 import numpy as np
 import math
 import unittest
@@ -16,7 +15,7 @@ def ra_numba(doy, lat):
     '''Modified from http://nbviewer.ipython.org/4117896/'''
     M, N = lat.shape
 
-    ra = np.zeros_like(lat)   
+    ra = np.zeros_like(lat)
     Gsc = 0.0820
 
     pi = math.pi
@@ -49,7 +48,7 @@ def ra_numpy(doy, lat):
     return ra
 
 class TestIssue57(unittest.TestCase):
-    @test_support.skip_if((sys.platform == 'darwin' and
+    @unittest.skipIf((sys.platform == 'darwin' and
                            sys.version_info[0] >= 3),
                           "Skip on Darwin Py3.3 for now")
     def test_ra_numba(self):
@@ -78,4 +77,4 @@ def benchmark(test_fn=None, control_fn=None):
     return dt0, dt1
 
 if __name__ == "__main__":
-    test_support.main()
+    unittest.main()

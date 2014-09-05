@@ -84,7 +84,7 @@ def empty_assign():
         pass
     print(i)
 
-@autojit(warnstyle='simple')
+@autojit
 def last_value():
     for i in range(10):
         pass
@@ -93,5 +93,5 @@ def last_value():
 
 if __name__ == '__main__':
     # backward3()
-    import numba
-    numba.testing.testmod()
+    import doctest
+    doctest.testmod()

@@ -9,10 +9,6 @@ Test the sum2d() example.
 import numpy
 
 from numba import *
-from numba.decorators import jit
-from numba.testing import test_support
-
-import sys
 import unittest
 
 # ______________________________________________________________________
@@ -39,10 +35,10 @@ def bad_sum2d(arr):
 
 # ______________________________________________________________________
 
-class TestASTSum2d(test_support.ASTTestCase):
-    
+class TestASTSum2d(unittest.TestCase):
+
     def test_vectorized_sum2d(self):
-        usum2d = self.jit(argtypes=[double[:,:]],
+        usum2d = jit(argtypes=[double[:,:]],
                           restype=double)(sum2d)
         image = numpy.random.rand(10, 10)
         plain_old_result = sum2d(image)
@@ -50,10 +46,7 @@ class TestASTSum2d(test_support.ASTTestCase):
         self.assertTrue((abs(plain_old_result - hot_new_result) < 1e-9).all())
 
     def test_vectorized_sum2d(self):
-        pass
-
-    def test_vectorized_sum2d(self):
-        usum2d = self.jit(argtypes=[double[:,:]],
+        usum2d = jit(argtypes=[double[:,:]],
                           restype=double)(sum2d)
         image = numpy.random.rand(10, 10)
         plain_old_result = sum2d(image)
@@ -66,12 +59,7 @@ class TestASTSum2d(test_support.ASTTestCase):
         image = numpy.random.rand(10, 10)
         self.assertEqual(bad_sum2d(image), compiled_bad_sum2d(image))
 
-    @test_support.checkSkipFlag("Test fails due to problem in Meta.")
-    def test_bad_sum2d(self):
-        self._bad_sum2d()
-
 if __name__ == "__main__":
-    #TestASTSum2d('test_vectorized_sum2d').debug()
     unittest.main()
 
 # ______________________________________________________________________

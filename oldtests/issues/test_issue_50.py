@@ -6,12 +6,12 @@ from numpy import zeros
 
 import unittest
 
-@jit()
+@jit
 def test():
     foo = zeros((1,))
     foo[0] = 0
 
-@jit()
+@jit
 def test2():
     foo = [0]
     foo[0] = 0

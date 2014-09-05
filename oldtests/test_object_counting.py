@@ -87,7 +87,6 @@ import ctypes
 
 from numba import *
 import numpy as np
-from numba.testing import test_support
 
 
 class Unique(object):
@@ -97,7 +96,7 @@ class Unique(object):
     def __str__(self):
         return "Unique(%d)" % self.value
 
-@autojit(backend='ast')
+@autojit
 def use_objects(obj_array):
     for i in range(10):
         var = obj_array[i]
@@ -115,68 +114,68 @@ def test_refcounting():
     #print out.getvalue() == expected
     print([sys.getrefcount(obj) for obj in L])
 
-@autojit(backend='ast', warn=False)
+@autojit
 def fresh_obj():
     x = object()
     return x
 
-@autojit(backend='ast', warn=False)
+@autojit
 def fresh_obj2():
     return object()
 
-@autojit(backend='ast', warn=False)
+@autojit
 def fresh_obj3():
     x = object()
     y = x
     return y
 
-@autojit(backend='ast', warn=False)
+@autojit
 def fresh_obj4():
     x = np.ones(1, dtype=np.double)
     y = x
     return y
 
-@autojit(backend='ast', warn=False)
+@autojit
 def fresh_obj5():
     return np.ones(1, dtype=np.double)
 
-@autojit(backend='ast', warn=False)
+@autojit
 def fresh_obj6():
     x = np.ones(1, dtype=np.double)
     y = x
     return x
 
-@autojit(backend='ast', warn=False)
+@autojit
 def fresh_obj7():
     x = np.ones(1, dtype=np.double)
     return [x]
 
-@autojit(backend='ast', warn=False)
+@autojit
 def fresh_obj8():
     x = np.ones(1, dtype=np.double)
     return {"value": x}
 
-@autojit(backend='ast', warn=False)
+@autojit
 def fresh_obj9():
     x = np.ones(1, dtype=np.double)
     return (x,)
 
-@autojit(backend='ast', warn=False)
+@autojit
 def index_count(L):
     x = L[0]
     return x
 
-@autojit(backend='ast', warn=False)
+@autojit
 def attr_count(obj):
     x = obj.value
     return x
 
-@autojit(backend='ast', warn=False)
+@autojit
 def exc(obj):
     x = obj
     return object()('boom')
 
-@autojit(backend='ast', warn=False)
+@autojit
 def count_arguments(x, y):
     x = y
     y = x
@@ -184,16 +183,16 @@ def count_arguments(x, y):
     b = y
     return x, y
 
-@autojit(backend='ast', warn=False)
+@autojit
 def count_arguments2(obj):
     pass
 
-@autojit(backend='ast', warn=False)
+@autojit
 def count_arguments3(obj):
     x = obj
 
 if __name__ == "__main__":
 #    print sys.getrefcount(fresh_obj())
 #    exc(object())
-    import numba
-    numba.testing.testmod()
+    import doctest
+    doctest.testmod()

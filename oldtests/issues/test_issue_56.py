@@ -2,7 +2,7 @@
 from __future__ import print_function, division, absolute_import
 
 from numba import *
-from numba.testing import test_support
+
 
 import numpy
 
@@ -27,5 +27,4 @@ class TestIssue56(unittest.TestCase):
                                        maxstar1d(test_a, test_b)))
 
 if __name__ == "__main__":
-#    TestIssue56("test_maxstar1d").debug()
-    test_support.main()
+    unittest.main()

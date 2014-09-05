@@ -716,6 +716,7 @@ def is_int_tuple(x):
 
 
 pyobject = Type('pyobject')
+object_ = pyobject
 none = Dummy('none')
 Any = Dummy('any')
 VarArg = Dummy('...')
@@ -853,4 +854,5 @@ f4
 f8
 c8
 c16
+object_
 '''.split()

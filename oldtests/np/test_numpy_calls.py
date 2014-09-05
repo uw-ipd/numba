@@ -1,22 +1,19 @@
-import sys
 
 import numpy as np
 
-from numba import *
 from numba.decorators import jit, autojit
-#from numba.testing import test_support
 
 a = np.arange(80).reshape(8, 10)
 
-@autojit(backend='ast')
+@autojit
 def np_sum(a):
     return np.sum(a, axis=0)
 
-@autojit(backend='ast')
+@autojit
 def np_copy(a):
     return a.copy(order='F')
 
-@autojit(backend='ast')
+@autojit
 def attributes(a):
     return (a.T,
             a.T.T,

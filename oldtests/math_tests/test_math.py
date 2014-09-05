@@ -16,14 +16,14 @@ def expected(a):
 def expected2(a):
     return np.sum(np.expm1(a) + np.ceil(a + 0.5) * np.rint(a + 1.5))
 
-@autojit(backend='ast')
+@autojit
 def numpy_math(a):
     sum = 0.0
     for i in range(a.shape[0]):
         sum += np.log(a[i]) * np.sqrt(a[i]) - np.cos(a[i]) * np.sin(a[i])
     return sum
 
-@autojit(backend='ast')
+@autojit
 def numpy_math2(a):
     sum = 0.0
     for i in range(a.shape[0]):
@@ -46,7 +46,7 @@ def test_numpy_math():
 # ______________________________________________________________________
 # Pow
 
-@autojit(backend='ast')
+@autojit
 def power(x, y):
     return x ** y
 
@@ -57,7 +57,7 @@ def test_power():
 # ______________________________________________________________________
 # Mod
 
-@autojit(backend='ast')
+@autojit
 def modulo(x, y):
     return x % y
 

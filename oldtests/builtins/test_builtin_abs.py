@@ -44,10 +44,10 @@ from numba import *
 
 ### Python usage
 
-@jit(object_())
-def abs_as_name():
-    x = abs
-    return x
+# @jit(object_())
+# def abs_as_name():
+#     x = abs
+#     return x
 
 @jit(argtypes=[object_])
 def py_abs(a):
@@ -57,9 +57,11 @@ def py_abs(a):
 
 @autojit(nopython=True)
 def _abs(value):
-    result = abs(value)
-    with nopython:
-        return result * 2 # test return type being non-object
+    result = abs(value) * 2
+    return result
+    ## with nopython is not supported anymore
+    # with nopython:
+    #     return result * 2 # test return type being non-object
 
 @jit(nopython=True, argtypes=[int_])
 def int_abs(a):
@@ -103,6 +105,5 @@ def complex128_abs(a):
     return _abs(a)
 
 if __name__ == '__main__':
-#    print long(int32_abs(-5))
-    import numba
-    numba.testing.testmod()
+    import doctest
+    doctest.testmod()

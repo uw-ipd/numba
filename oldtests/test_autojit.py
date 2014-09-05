@@ -32,5 +32,5 @@ def jit_as_arg(jit_arg, value):
 
 
 if __name__ == "__main__":
-    import numba
-    numba.testing.testmod()
+    import doctest
+    doctest.testmod()

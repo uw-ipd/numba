@@ -7,7 +7,7 @@ computations.
 from numba import *
 import unittest
 import numpy as np
-from numba.testing import test_support
+
 
 
 def mandel_1(real_coord, imag_coord, max_iters):
@@ -159,4 +159,4 @@ class TestMandelbrot(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    test_support.main()
+    unittest.main()

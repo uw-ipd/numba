@@ -21,8 +21,6 @@ from numba import *
 
 myglobal = 20
 
-autojit = autojit(warn=False, warnstyle="simple")
-
 @autojit
 def get_globals():
     return globals()['myglobal']
@@ -53,6 +51,5 @@ def min_(x):
     return min(1, 2.0, x, 14)
 
 if __name__ == '__main__':
-    get_globals()
-    import numba
-    numba.testing.testmod()
+    import doctest
+    doctest.testmod()

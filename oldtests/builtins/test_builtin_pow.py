@@ -3,10 +3,10 @@
 3
 >>> pow3(3,3,5)
 2
- 
+
 >>> pow3_const()
 3
- 
+
 >>> pow2(2,3)
 8
 >>> pow2(3,3)
@@ -21,7 +21,7 @@
 2.25
 >>> pow2(1.5, 1.5) == pow(1.5, 1.5)
 True
- 
+
 >>> pow_op(3,3)
 27
 >>> pow_op(3.0,3)
@@ -49,27 +49,28 @@ True
 
 from numba import autojit
 from numpy import allclose
- 
+from operator import pow
+
 @autojit
 def pow3(a,b,c):
     return pow(a,b,c)
- 
+
 @autojit
 def pow3_const():
     return pow(2,3,5)
- 
+
 @autojit(nopython=True)
 def pow2(a,b):
     return pow(a,b)
- 
+
 @autojit(nopython=True)
 def pow_op(a,b):
     return a**b
- 
+
 @autojit(nopython=True)
 def pow2_const():
     return pow(2,3)
- 
+
 if __name__ == '__main__':
-    import numba
-    numba.testing.testmod()
+    import doctest
+    doctest.testmod()

@@ -174,7 +174,7 @@ class HSAKernel(HSAKernelBase):
     """
     A HSA kernel object
     """
-    INJECTED_NARG = 6
+    INJECTED_NARG = 0
 
     def __init__(self, llvm_module, name, argtypes):
         super(HSAKernel, self).__init__()

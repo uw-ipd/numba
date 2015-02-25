@@ -159,7 +159,8 @@ class HSATargetContext(BaseContext):
         Handle addrspacecast
         """
         ptras = llvmir.PointerType(src.type.pointee, addrspace=addrspace)
-        return builder.addrspacecast(src, ptras)
+        intaddr = builder.ptrtoint(src, llvmir.IntType(64))
+        return builder.inttoptr(intaddr, ptras)
 
 
 def set_hsa_kernel(fn):

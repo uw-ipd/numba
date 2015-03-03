@@ -39,7 +39,7 @@ def atomic_add3(ary):
     ary[tx, ty] = sm[tx, ty]
 
 
-@unittest.skip("addrspacecast issue")
+@unittest.skip("atomic_rmw issue")
 class TestHsaAtomics(unittest.TestCase):
     def test_atomic_add(self):
         ary = np.random.randint(0, 32, size=32).astype(np.uint32)

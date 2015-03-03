@@ -55,34 +55,6 @@ def _declare_function(context, builder, name, sig, cargs,
     return fn
 
 
-def _atomic_mangle(op, ty, addrspace):
-    tyletter = mangle_type(ty)
-    as_str = "AS{0}".format(addrspace)
-    tyaddrstr = "U{0}{1}".format(len(as_str), as_str)
-    mangled = "_Z{0}atomic_{1}PV{2}{3}{3}".format(7+len(op), op, tyaddrstr,
-                                                  tyletter)
-    return mangled
-
-
-def _declare_atomic(context, builder, op, llptrty, ty):
-    """Insert declaration for an atomic builtin. This is as ugly as it gets,
-    as our mangler doesn't support (yet!) the modifiers needed, I will just
-    hardcode the signature for the atomic operations here:
-    "ty"
-    """
-    mod = cgutils.get_module(builder)
-    llty = llptrty.pointee
-    # llvm return type and args are hardcoded...
-    llretty = llty
-    llargs = [llptrty, llty]
-    fnty = Type.function(llretty, llargs)
-    sym = _atomic_mangle(op, ty, llptrty.addrspace)
-
-    fn = mod.get_or_insert_function(fnty, sym)
-    fn.calling_convention = target.CC_SPIR_FUNC
-    return fn
-
-
 @register
 @implement(stubs.get_global_id, types.uint32)
 def get_global_id_impl(context, builder, sig, args):
@@ -159,8 +131,7 @@ def hsail_atomic_add_tuple(context, builder, sig, args):
     lary = context.make_array(aryty)(context, builder, ary)
     ptr = cgutils.get_item_pointer(builder, aryty, lary, indices)
 
-    atomic_add = _declare_atomic(context, builder, "add", ptr.type, valty)
-    return builder.call(atomic_add, (ptr, val))
+    return builder.atomic_rmw('add', ptr, val, 'monotonic')
 
 
 @register

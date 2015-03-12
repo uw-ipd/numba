@@ -72,7 +72,7 @@ class TestMath(unittest.TestCase):
                                            math_fn.__name__,
                                            dtype.__name__))
 
-    @unittest.skip("sin")
+    # @unittest.skip("sin")
     def test_sin(self):
         funcs = [math.sin]
 
@@ -80,7 +80,7 @@ class TestMath(unittest.TestCase):
             self._generic_test_unary(fn, getattr(np, fn.__name__),
                                      span=(-np.pi, np.pi))
 
-    @unittest.skip("cos")
+    # @unittest.skip("cos")
     def test_cos(self):
         funcs = [math.cos]
 
@@ -88,7 +88,7 @@ class TestMath(unittest.TestCase):
             self._generic_test_unary(fn, getattr(np, fn.__name__),
                                      span=(-np.pi, np.pi))
 
-    @unittest.skip("tan")
+    # @unittest.skip("tan")
     def test_tan(self):
         funcs = [math.tan]
 
@@ -112,14 +112,14 @@ class TestMath(unittest.TestCase):
                                      span=(-4.0, 4.0))
 
 
-    @unittest.skip("asinh")
+    # @unittest.skip("asinh")
     def test_trigh_inv_asinh(self):
         funcs = [(math.asinh, np.arcsinh, (-4, 4))]
 
         for fn, np_fn, span in funcs:
             self._generic_test_unary(fn, np_fn, span=span)
 
-    @unittest.skip("acosh")
+    # @unittest.skip("acosh")
     def test_trigh_inv_acosh(self):
         funcs = [(math.acosh, np.arccosh, ( 1, 9))]
 
@@ -132,7 +132,7 @@ class TestMath(unittest.TestCase):
         for fn, np_fn, span in funcs:
             self._generic_test_unary(fn, np_fn, span=span)
 
-    @unittest.skip("isnan")
+    # @unittest.skip("isnan")
     def test_isnan(self):
         funcs = [math.isnan]
         cases = (float('nan'), float('inf'), float('-inf'), float('-nan'),
@@ -141,7 +141,7 @@ class TestMath(unittest.TestCase):
             self._generic_test_unary(fn, getattr(np, fn.__name__),
                                      cases=cases)
 
-    @unittest.skip("isinf")
+    # @unittest.skip("isinf")
     def test_isinf(self):
         funcs = [math.isinf]
         cases = (float('nan'), float('inf'), float('-inf'), float('-nan'),
@@ -194,7 +194,7 @@ class TestMath(unittest.TestCase):
         for fn in funcs:
             self._generic_test_binary(fn, getattr(np, fn.__name__))
 
-    @unittest.skip("fmod issue")
+    # @unittest.skip("fmod issue")
     def test_fmod(self):
         funcs = [math.fmod]
         for fn in funcs:

@@ -8,7 +8,7 @@ from numba import hsa, float32
 
 
 class TestMatMul(unittest.TestCase):
-    @unittest.skip("addrspacecast issues")
+    # @unittest.skip("addrspacecast issues")
     def test_matmul_naive(self):
         @hsa.jit
         def matmul(A, B, C):
@@ -48,7 +48,7 @@ class TestMatMul(unittest.TestCase):
         print("CPU time:", te - ts)
         np.testing.assert_allclose(ans, C, rtol=1e-5)
 
-    @unittest.skip("addrspacecast issues")
+    # @unittest.skip("addrspacecast issues")
     def test_matmul_fast(self):
         blocksize = 20
         gridsize = 20

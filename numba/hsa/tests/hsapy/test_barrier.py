@@ -26,7 +26,7 @@ class TestBarrier(unittest.TestCase):
         # The computation is correct?
         np.testing.assert_allclose(orig * 2, arr)
 
-    @unittest.skip("addrspacecast issue")
+    # @unittest.skip("addrspacecast issue")
     def test_local_memory(self):
         blocksize = 10
 

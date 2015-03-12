@@ -159,9 +159,13 @@ class HSATargetContext(BaseContext):
         """
         Handle addrspacecast
         """
+        # A workaround for missing addrspacecast  but seems to break in certain
+        # usecases (e.g. group memory)
         ptras = llvmir.PointerType(src.type.pointee, addrspace=addrspace)
         intaddr = builder.ptrtoint(src, llvmir.IntType(64))
         return builder.inttoptr(intaddr, ptras)
+        ## Expects to work with:
+        # return builder.addrspacecast(src, ptras)
 
 
 def set_hsa_kernel(fn):

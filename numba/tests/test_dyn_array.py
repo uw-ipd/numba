@@ -331,6 +331,21 @@ class TestDynArray(unittest.TestCase):
         np.testing.assert_equal(pyfunc(x, y, t), cfunc(x, y, t))
         self.assertEqual(initrefct, (sys.getrefcount(x), sys.getrefcount(y)))
 
+    def test_tuple(self):
+
+        def pyfunc(x, y):
+            tup1 = (x, y)
+            tup2 = (x, y)
+            return tup1[0][0] + tup2[1][0]
+
+        cfunc = nrtjit(pyfunc)
+
+        x = np.random.random(100)
+        y = np.random.random(100)
+
+        initrefct = sys.getrefcount(x), sys.getrefcount(y)
+        np.testing.assert_equal(pyfunc(x, y), cfunc(x, y))
+        self.assertEqual(initrefct, (sys.getrefcount(x), sys.getrefcount(y)))
 
 def benchmark_refct_speed():
     def pyfunc(x, y, t):
